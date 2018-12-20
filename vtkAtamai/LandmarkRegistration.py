@@ -31,7 +31,10 @@ Public Methods:
   GetSimilarityResidual()    -- return the residual of the fit
 
 """
-import numpy
+from __future__ import division
+from builtins import object
+from past.utils import old_div
+import numpy as np
 from LinearAlgebra import *
 
 
@@ -50,19 +53,19 @@ class LandmarkRegistration(object):
 
     def Register(self):
         # convert to arrays
-        APoints = numpy.array(self.__SourceLandmarks, Float)
-        BPoints = numpy.array(self.__TargetLandmarks, Float)
+        APoints = np.array(self.__SourceLandmarks, Float)
+        BPoints = np.array(self.__TargetLandmarks, Float)
         # number of points
         n = APoints.shape[0]
         # find centroids
-        APointsCentroid = sum(APoints, 0) / n
-        BPointsCentroid = sum(BPoints, 0) / n
+        APointsCentroid = old_div(sum(APoints, 0), n)
+        BPointsCentroid = old_div(sum(BPoints, 0), n)
 
-        A = numpy.array((APoints[:, 0] - APointsCentroid[0],
+        A = np.array((APoints[:, 0] - APointsCentroid[0],
                          APoints[:, 1] - APointsCentroid[1],
                          APoints[:, 2] - APointsCentroid[2]))
 
-        B = numpy.array((BPoints[:, 0] - BPointsCentroid[0],
+        B = np.array((BPoints[:, 0] - BPointsCentroid[0],
                          BPoints[:, 1] - BPointsCentroid[1],
                          BPoints[:, 2] - BPointsCentroid[2]))
 
@@ -71,7 +74,7 @@ class LandmarkRegistration(object):
         Mdiag = diagonal(M)
 
         # calculate the 4x4 N matrix as described in Horn's paper
-        N = numpy.zeros((4, 4), Float)
+        N = np.zeros((4, 4), Float)
 
         # diagnonal elements of N
         N[0, 0] = dot((1, 1, 1), Mdiag)
@@ -102,7 +105,7 @@ class LandmarkRegistration(object):
         wx, wy, wz = w * x, w * y, w * z
         xy, xz, yz = x * y, x * z, y * z
 
-        M = numpy.array(
+        M = np.array(
             [[ww + xx - yy - zz, 2.0 * (-wz + xy),  2.0 * (wy + xz)],
              [2.0 * (wz + xy),   ww - xx + yy - zz, 2.0 * (
               -wx + yz)],
@@ -111,7 +114,7 @@ class LandmarkRegistration(object):
             Float)
 
         # find the scale
-        S = trace(dot(B, transpose(dot(M, A)))) / trace(dot(A, transpose(A)))
+        S = old_div(trace(dot(B, transpose(dot(M, A)))), trace(dot(A, transpose(A))))
 
         # rotation+scale matrix
         MS = M * S
@@ -126,11 +129,11 @@ class LandmarkRegistration(object):
         # find the residuals
         diff = dot(MS, A) - B
         self.__SimilarityResidual = sqrt(sum(
-            sum(dot(diff, transpose(diff)) / n)))
+            sum(old_div(dot(diff, transpose(diff)), n))))
 
         diff = dot(M, A) - B
         self.__RigidBodyResidual = sqrt(
-            sum(sum(dot(diff, transpose(diff)) / n)))
+            sum(sum(old_div(dot(diff, transpose(diff)), n))))
 
     # set the source landmarks
     def SetSourceLandmarks(self, points):
@@ -172,7 +175,7 @@ class LandmarkRegistration(object):
     def GetRigidBodyMatrix(self):
         M = self.__Rotation
         t = dot(M, self.__PreTranslation) + self.__PostTranslation
-        return numpy.array(((M[0, 0], M[0, 1], M[0, 2], t[0]),
+        return np.array(((M[0, 0], M[0, 1], M[0, 2], t[0]),
                             (M[1, 0], M[1, 1], M[1, 2], t[1]),
                             (M[2, 0], M[2, 1], M[2, 2], t[2]),
                             (0.0,   0.0,   0.0,   1.0)))
@@ -181,7 +184,7 @@ class LandmarkRegistration(object):
     def GetSimilarityMatrix(self):
         M = self.__Rotation * self.__Scale
         t = dot(M, self.__PreTranslation) + self.__PostTranslation
-        return numpy.array(((M[0, 0], M[0, 1], M[0, 2], t[0]),
+        return np.array(((M[0, 0], M[0, 1], M[0, 2], t[0]),
                             (M[1, 0], M[1, 1], M[1, 2], t[1]),
                             (M[2, 0], M[2, 1], M[2, 2], t[2]),
                             (0.0,   0.0,   0.0,   1.0)))

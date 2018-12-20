@@ -1,10 +1,16 @@
-from Tkinter import *
+from __future__ import division
+from __future__ import absolute_import
+from future import standard_library
+standard_library.install_aliases()
+from builtins import range
+from past.utils import old_div
+from tkinter import *
 import vtk
 
 import math
 import string
 
-from PointerFactory import *
+from .PointerFactory import *
 
 
 class CalibrationPointer(PointerFactory):
@@ -231,10 +237,8 @@ class RegistrationDialog(Frame):
         self._TargetPoints.SetNumberOfPoints(0)
         for i in range(len(self._SourceLandmarks)):
             if self._TargetLandmarks[i] and self._SourceLandmarks[i]:
-                apply(
-                    self._SourcePoints.InsertNextPoint, self._SourceLandmarks[i])
-                apply(
-                    self._TargetPoints.InsertNextPoint, self._TargetLandmarks[i])
+                self._SourcePoints.InsertNextPoint(*self._SourceLandmarks[i])
+                self._TargetPoints.InsertNextPoint(*self._TargetLandmarks[i])
 
         self._TargetPoints.Modified()
         self._SourcePoints.Modified()
@@ -275,7 +279,7 @@ class RegistrationDialog(Frame):
         if leastsqn > 2:
             self._StdDevLabel.configure(
                 text=('Standard Deviation: %5.1f mm (%d %s)' %
-                      (math.sqrt(leastsq / (leastsqn - 2)), leastsqn, ptext)))
+                      (math.sqrt(old_div(leastsq, (leastsqn - 2))), leastsqn, ptext)))
             self._InstrumentTracker.GetTracker().SetWorldCalibrationMatrix(
                 self._Transform.GetInverse().GetMatrix())
         else:

@@ -1,3 +1,4 @@
+from __future__ import division
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -36,6 +37,7 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from past.utils import old_div
 __rcs_info__ = {
     #
     #  Creation Information
@@ -109,7 +111,7 @@ class Label(Widget):
         if not 'height' in kw:
             kw['height'] = 30
 
-        apply(Widget.__init__, (self, parent), kw)
+        Widget.__init__(*(self, parent), **kw)
 
         # add to the configuration dictionary
         self._Config['bitmap'] = bitmap
@@ -145,11 +147,11 @@ class Label(Widget):
             i = 1
         mapper = self._Actors[i].GetMapper()
         if "FreeType" in mapper.GetClassName():
-            self._Actors[i].SetPosition(x + width / 2 - x0,
-                                        y + height / 2 - y0)
+            self._Actors[i].SetPosition(x + old_div(width, 2) - x0,
+                                        y + old_div(height, 2) - y0)
         else:  # not a FreeType font, needs position correction
-            self._Actors[i].SetPosition(x + width / 2 - x0 + 1,
-                                        y + height / 2 - y0 + 1)
+            self._Actors[i].SetPosition(x + old_div(width, 2) - x0 + 1,
+                                        y + old_div(height, 2) - y0 + 1)
         self.Modified()
 
     def _SetPoints(self):
@@ -247,7 +249,7 @@ class Label(Widget):
         # if there is a bitmap
         if image:
             image.UpdateInformation()
-            extent = image.GetWholeExtent()
+            extent = image.GetExtent()  # VTK 6
             spacing = image.GetSpacing()
             origin = image.GetOrigin()
 
@@ -305,14 +307,14 @@ class Label(Widget):
         self._TextMapper = mapper
 
         actor = vtk.vtkActor2D()
-        apply(actor.GetProperty().SetColor, self._Config['foreground'])
+        actor.GetProperty().SetColor(*self._Config['foreground'])
         actor.SetMapper(mapper)
         if "FreeType" in mapper.GetClassName():
-            actor.SetPosition(x + width / 2 - x0,
-                              y + height / 2 - y0)
+            actor.SetPosition(x + old_div(width, 2) - x0,
+                              y + old_div(height, 2) - y0)
         else:  # not a FreeType font, needs position correction
-            actor.SetPosition(x + width / 2 - x0 + 1,
-                              y + height / 2 - y0 + 1)
+            actor.SetPosition(x + old_div(width, 2) - x0 + 1,
+                              y + old_div(height, 2) - y0 + 1)
 
         self._Actors.append(actor)
         if self._Renderer:

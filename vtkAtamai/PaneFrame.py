@@ -122,11 +122,13 @@ Notes:
   methods to the RenderPane.
 
 """
+from __future__ import division
 
 #======================================
+from past.utils import old_div
 import vtk
 
-from zope import interface
+from zope.interface import implementer
 from vtkAtamai.interfaces import IPaneFrame
 from vtkAtamai import EventHandler
 
@@ -134,29 +136,41 @@ import time
 import logging
 import copy
 
+logger = logging.getLogger(__name__)
 
+
+@implementer(IPaneFrame)
 class PaneFrame(EventHandler.EventHandler):
     # a list of all the PaneFrames in this application
     AllPaneFrames = []
     _ScheduledCallbacks = []
     _ScheduleId = 0
 
-    interface.implements(IPaneFrame)
-
     def __del__(self):
+        self.removeAllReferences()
+
+    def removeAllReferences(self):
         # remove ourselves from the list of paneframes
         if self in self.AllPaneFrames:
             self.AllPaneFrames.remove(self)
         # cancel any timers
-        if self._QualityRenderId != -1:
+        if self._QualityRenderId is not None:
             self.cancelTimers()
 
     def cancelTimers(self):
         pass
 
     def tearDown(self):
+        self._UnBindInteractor()
+
+        # disconnect RenderPanes
+        for pane in self._RenderPanes:
+            self.DisconnectRenderPane(pane)
 
         self._FocusPane = self._RenderWindow = self._RenderWindowInteractor = None
+
+        # removeReferences
+        self.removeAllReferences()
 
     def __init__(self, width=400, height=400, **kw):
         EventHandler.EventHandler.__init__(self)
@@ -176,7 +190,7 @@ class PaneFrame(EventHandler.EventHandler):
         self._FocusPane = None
 
         # the ID of the timer that checks whether to do high-quality renders
-        self._QualityRenderId = -1
+        self._QualityRenderId = None
 
         # the time when the last render occurred
         self._RenderFTime = 0.0
@@ -209,14 +223,23 @@ class PaneFrame(EventHandler.EventHandler):
 
         self._BindInteractor()
 
+    def _UnBindInteractor(self):
+
+        if self._RenderWindowInteractor:
+            self._RenderWindowInteractor.SetInteractorStyle(None)
+            self._RenderWindowInteractor.RemoveAllObservers()
+
+        if self.interactor_style:
+            self.interactor_style.RemoveAllObservers()
+        self.interactor_style = None
+
     def _BindInteractor(self):
 
         self.interactor_style = vtk.vtkInteractorStyleUser()
 
         self._RenderWindowInteractor.SetInteractorStyle(self.interactor_style)
 
-        #obj = self.interactor_style
-        obj = self._RenderWindowInteractor
+        obj = self.interactor_style
 
         obj.AddObserver("LeftButtonPressEvent",
                         self._OnButtonPress)
@@ -241,7 +264,10 @@ class PaneFrame(EventHandler.EventHandler):
         obj.AddObserver("KeyReleaseEvent",
                         self._OnKeyRelease)
         obj.AddObserver("CharEvent", self._OnChar)
+        obj.AddObserver("TimerEvent",
+                        self._OnTimer)
 
+        # these events bind to the interactor rather than the style
         obj.AddObserver("ConfigureEvent",
                         self._OnConfigure)
         obj.AddObserver("EnterEvent",
@@ -249,8 +275,6 @@ class PaneFrame(EventHandler.EventHandler):
         obj.AddObserver("LeaveEvent",
                         self._OnLeave)
 
-        obj.AddObserver("TimerEvent",
-                        self._OnTimer)
 
     #--------------------------------------
     def SetTitle(self, title):
@@ -289,16 +313,16 @@ class PaneFrame(EventHandler.EventHandler):
         e = EventHandler.Event()
         e.type = '4'
         e.state = 1 * (obj.GetShiftKey() > 0) | \
-            4 * (obj.GetControlKey() > 0) | \
-            8192 * obj.GetRepeatCount() | \
+            4 * (obj.GetCtrlKey() > 0) | \
+            8192 * obj.GetInteractor().GetRepeatCount() | \
             self._State
         e.keysym = '??'
         e.char = '\0'
         e.num = {"LeftButtonPressEvent": 1,
                  "MiddleButtonPressEvent": 2,
                  "RightButtonPressEvent": 3}[event]
-        (e.width, e.height) = obj.GetSize()
-        (e.x, e.y) = obj.GetEventPosition()
+        (e.width, e.height) = obj.GetInteractor().GetSize()
+        (e.x, e.y) = obj.GetInteractor().GetEventPosition()
         self._State = self._State | (0x80 << e.num)  # set bit for button
         self.HandleEvent(e)
 
@@ -311,15 +335,15 @@ class PaneFrame(EventHandler.EventHandler):
         e = EventHandler.Event()
         e.type = '5'
         e.state = 1 * (obj.GetShiftKey() > 0) | \
-            4 * (obj.GetControlKey() > 0) | \
+            4 * (obj.GetCtrlKey() > 0) | \
             self._State
         e.keysym = '??'
         e.char = '\0'
         e.num = {"LeftButtonReleaseEvent": 1,
                  "MiddleButtonReleaseEvent": 2,
                  "RightButtonReleaseEvent": 3}[event]
-        (e.width, e.height) = obj.GetSize()
-        (e.x, e.y) = obj.GetEventPosition()
+        (e.width, e.height) = obj.GetInteractor().GetSize()
+        (e.x, e.y) = obj.GetInteractor().GetEventPosition()
         self._State = self._State & ~(0x80 << e.num)  # clear bit for button
         self.HandleEvent(e)
 
@@ -329,19 +353,24 @@ class PaneFrame(EventHandler.EventHandler):
         if self._RenderWindowInteractor.GetInteractorStyle() != self.interactor_style:
             return
 
-        (x, y) = obj.GetEventPosition()
-        (oldx, oldy) = obj.GetLastEventPosition()
+        #(x, y) = obj.GetEventPosition()
+        #(oldx, oldy) = obj.GetLastEventPosition()
+        x,y = obj.GetLastPos()
+        oldx, oldy = obj.GetOldPos()
+
         if x == oldx and y == oldy:
             return
+
         e = EventHandler.Event()
         e.type = '6'
         e.state = 1 * (obj.GetShiftKey() > 0) | \
-            4 * (obj.GetControlKey() > 0) | \
+            4 * (obj.GetCtrlKey() > 0) | \
             self._State
         e.keysym = '??'
         e.char = '\0'
-        e.num = 0
-        (e.width, e.height) = obj.GetSize()
+        # JDG changed e.num to reflect real mouse button state
+        e.num = obj.GetButton()
+        (e.width, e.height) = obj.GetInteractor().GetSize()
         (e.x, e.y) = (x, y)
         # self.PrintEvent(e)
         self.HandleEvent(e)
@@ -358,18 +387,18 @@ class PaneFrame(EventHandler.EventHandler):
         e = EventHandler.Event()
         e.type = '2'
 
-        e.alt_key = obj.GetAltKey()
-        e.ctrl_key = obj.GetControlKey()
+        e.alt_key = obj.GetInteractor().GetAltKey()
+        e.ctrl_key = obj.GetCtrlKey()
         e.shift_key = obj.GetShiftKey()
 
         e.state = 1 * (obj.GetShiftKey() > 0) | \
-            4 * (obj.GetControlKey() > 0) | \
+            4 * (obj.GetCtrlKey() > 0) | \
             self._State
         e.keysym = obj.GetKeySym()
-        e.char = obj.GetKeyCode()
+        e.char = obj.GetInteractor().GetKeyCode()
         e.num = 0
-        (e.width, e.height) = obj.GetSize()
-        (e.x, e.y) = obj.GetLastEventPosition()
+        (e.width, e.height) = obj.GetInteractor().GetSize()
+        (e.x, e.y) = obj.GetInteractor().GetLastEventPosition()
         # self.PrintEvent(e)
         self.HandleEvent(e)
 
@@ -381,19 +410,19 @@ class PaneFrame(EventHandler.EventHandler):
 
         e = EventHandler.Event()
         e.type = '3'
-
-        e.alt_key = obj.GetAltKey()
-        e.ctrl_key = obj.GetControlKey()
+        e.alt_key = obj.GetInteractor().GetAltKey()
+        e.ctrl_key = obj.GetCtrlKey()
         e.shift_key = obj.GetShiftKey()
 
         e.state = 1 * (obj.GetShiftKey() > 0) | \
-            4 * (obj.GetControlKey() > 0) | \
+            4 * (obj.GetCtrlKey() > 0) | \
             self._State
+
         e.keysym = obj.GetKeySym()
-        e.char = obj.GetKeyCode()
+        e.char = obj.GetInteractor().GetKeyCode()
         e.num = 0
-        (e.width, e.height) = obj.GetSize()
-        (e.x, e.y) = obj.GetLastEventPosition()
+        (e.width, e.height) = obj.GetInteractor().GetSize()
+        (e.x, e.y) = obj.GetInteractor().GetLastEventPosition()
         # self.PrintEvent(e)
         self.HandleEvent(e)
 
@@ -401,13 +430,13 @@ class PaneFrame(EventHandler.EventHandler):
         e = EventHandler.Event()
         e.type = '22'
         e.state = 1 * (obj.GetShiftKey() > 0) | \
-            4 * (obj.GetControlKey() > 0) | \
+            4 * (obj.GetCtrlKey() > 0) | \
             self._State
         e.keysym = '??'
         e.char = '\0'
         e.num = 0
-        (e.width, e.height) = obj.GetSize()
-        (e.x, e.y) = obj.GetLastEventPosition()
+        (e.width, e.height) = obj.GetInteractor().GetSize()
+        (e.x, e.y) = obj.GetInteractor().GetLastEventPosition()
         # self.PrintEvent(e)
         self.HandleEvent(e)
 
@@ -415,13 +444,13 @@ class PaneFrame(EventHandler.EventHandler):
         e = EventHandler.Event()
         e.type = '7'
         e.state = 1 * (obj.GetShiftKey() > 0) | \
-            4 * (obj.GetControlKey() > 0) | \
+            4 * (obj.GetCtrlKey() > 0) | \
             self._State
         e.keysym = '??'
         e.char = '\0'
         e.num = 0
-        (e.width, e.height) = obj.GetSize()
-        (e.x, e.y) = obj.GetEventPosition()
+        (e.width, e.height) = obj.GetInteractor().GetSize()
+        (e.x, e.y) = obj.GetInteractor().GetEventPosition()
         # self.PrintEvent(e)
         self.HandleEvent(e)
 
@@ -429,13 +458,13 @@ class PaneFrame(EventHandler.EventHandler):
         e = EventHandler.Event()
         e.type = '8'
         e.state = 1 * (obj.GetShiftKey() > 0) | \
-            4 * (obj.GetControlKey() > 0) | \
+            4 * (obj.GetCtrlKey() > 0) | \
             self._State
         e.keysym = '??'
         e.char = '\0'
         e.num = 0
-        (e.width, e.height) = obj.GetSize()
-        (e.x, e.y) = obj.GetEventPosition()
+        (e.width, e.height) = obj.GetInteractor().GetSize()
+        (e.x, e.y) = obj.GetInteractor().GetEventPosition()
         # self.PrintEvent(e)
         self.HandleEvent(e)
 
@@ -449,125 +478,6 @@ class PaneFrame(EventHandler.EventHandler):
                 else:  # reschedule
                     item[2] = epochmillisecs + item[3]
                 item[1]()
-
-    def _TrapButtonPress(self, num):
-        e = EventHandler.Event()
-        e.type = '4'
-        e.state = 1 * (self._InteractorStyle.GetShiftKey() > 0) | \
-            4 * (self._InteractorStyle.GetCtrlKey() > 0) | \
-            self._State
-        e.keysym = '??'
-        e.char = '\0'
-        e.num = num
-        (e.width, e.height) = self._RenderWindowInteractor.GetSize()
-        (e.x, e.y) = self._RenderWindowInteractor.GetEventPosition()
-        # should be changed to the below eventually:
-        #(e.x, e.y) = self._InteractorStyle.GetLastPos()
-        self._State = self._State | (0x80 << num)  # set bit for button
-        self.HandleEvent(e)
-
-    def _TrapButtonRelease(self, num):
-        e = EventHandler.Event()
-        e.type = '5'
-        e.state = 1 * (self._InteractorStyle.GetShiftKey() > 0) | \
-            4 * (self._InteractorStyle.GetCtrlKey() > 0) | \
-            self._State
-        e.keysym = '??'
-        e.char = '\0'
-        e.num = num
-        (e.width, e.height) = self._RenderWindowInteractor.GetSize()
-        (e.x, e.y) = self._RenderWindowInteractor.GetEventPosition()
-        self._State = self._State & ~(0x80 << num)  # clear bit for button
-        self.HandleEvent(e)
-
-    def _TrapMotion(self):
-        (x, y) = self._InteractorStyle.GetLastPos()
-        (oldx, oldy) = self._InteractorStyle.GetOldPos()
-        if x == oldx and y == oldy:
-            return
-        e = EventHandler.Event()
-        e.type = '6'
-        e.state = 1 * (self._InteractorStyle.GetShiftKey() > 0) | \
-            4 * (self._InteractorStyle.GetCtrlKey() > 0) | \
-            self._State
-        e.keysym = '??'
-        e.char = '\0'
-        e.num = 0
-        (e.width, e.height) = self._RenderWindowInteractor.GetSize()
-        (e.x, e.y) = (x, y)
-        # self.PrintEvent(e)
-        self.HandleEvent(e)
-        self._TrapTimer()
-
-    def _TrapKeyPress(self):
-        e = EventHandler.Event()
-        e.type = '2'
-        e.state = 1 * (self._InteractorStyle.GetShiftKey() > 0) | \
-            4 * (self._InteractorStyle.GetCtrlKey() > 0) | \
-            self._State
-        e.keysym = self._InteractorStyle.GetKeySym()
-        e.char = chr(self._InteractorStyle.GetChar())
-        e.num = 0
-        (e.width, e.height) = self._RenderWindowInteractor.GetSize()
-        (e.x, e.y) = self._InteractorStyle.GetLastPos()
-        # self.PrintEvent(e)
-        self.HandleEvent(e)
-
-    def _TrapKeyRelease(self):
-        e = EventHandler.Event()
-        e.type = '3'
-        e.state = 1 * (self._InteractorStyle.GetShiftKey() > 0) | \
-            4 * (self._InteractorStyle.GetCtrlKey() > 0) | \
-            self._State
-        e.keysym = self._InteractorStyle.GetKeySym()
-        e.char = chr(self._InteractorStyle.GetChar())
-        e.num = 0
-        (e.width, e.height) = self._RenderWindowInteractor.GetSize()
-        (e.x, e.y) = self._InteractorStyle.GetLastPos()
-        # self.PrintEvent(e)
-        self.HandleEvent(e)
-
-    def _TrapConfigure(self):
-        e = EventHandler.Event()
-        e.type = '22'
-        e.state = 1 * (self._InteractorStyle.GetShiftKey() > 0) | \
-            4 * (self._InteractorStyle.GetCtrlKey() > 0) | \
-            self._State
-        e.keysym = '??'
-        e.char = '\0'
-        e.num = 0
-        (e.width, e.height) = self._RenderWindowInteractor.GetSize()
-        (e.x, e.y) = self._InteractorStyle.GetLastPos()
-        # self.PrintEvent(e)
-        self.HandleEvent(e)
-
-    def _TrapEnter(self):
-        e = EventHandler.Event()
-        e.type = '7'
-        e.state = 1 * (self._InteractorStyle.GetShiftKey() > 0) | \
-            4 * (self._InteractorStyle.GetCtrlKey() > 0) | \
-            self._State
-        e.keysym = '??'
-        e.char = '\0'
-        e.num = 0
-        (e.width, e.height) = self._RenderWindowInteractor.GetSize()
-        (e.x, e.y) = self._InteractorStyle.GetLastPos()
-        # self.PrintEvent(e)
-        self.HandleEvent(e)
-
-    def _TrapLeave(self):
-        e = EventHandler.Event()
-        e.type = '8'
-        e.state = 1 * (self._InteractorStyle.GetShiftKey() > 0) | \
-            4 * (self._InteractorStyle.GetCtrlKey() > 0) | \
-            self._State
-        e.keysym = '??'
-        e.char = '\0'
-        e.num = 0
-        (e.width, e.height) = self._RenderWindowInteractor.GetSize()
-        (e.x, e.y) = self._InteractorStyle.GetLastPos()
-        # self.PrintEvent(e)
-        self.HandleEvent(e)
 
     #--------------------------------------
     def _SetCurrentPane(self, pane, event):
@@ -637,10 +547,10 @@ class PaneFrame(EventHandler.EventHandler):
             xmin, ymin, xmax, ymax = pane.GetViewport()
             left, bottom, right, top = pane.GetViewportOffsets()
 
-            xmin = (xmin * width + left) / width
-            xmax = (xmax * width + right) / width
-            ymin = (ymin * height + bottom) / height
-            ymax = (ymax * height + top) / height
+            xmin = old_div((xmin * width + left), width)
+            xmax = old_div((xmax * width + right), width)
+            ymin = old_div((ymin * height + bottom), height)
+            ymax = old_div((ymax * height + top), height)
 
             pane.GetRenderer().SetViewport(xmin, ymin, xmax, ymax)
 
@@ -679,7 +589,8 @@ class PaneFrame(EventHandler.EventHandler):
             return
 
         self._RenderWindow.SetDesiredUpdateRate(0.05)
-        self.RenderAll(force_redraw=True)
+        ## JDG self.RenderAll(force_redraw=True)
+        self.Render(force_redraw=True)
 
     #--------------------------------------
     def HandleEvent(self, event):
@@ -693,7 +604,7 @@ class PaneFrame(EventHandler.EventHandler):
         returnval = 1
 
         # set QualityRender to be called every so often for LOD stuff
-        if self._QualityRenderId < 0:
+        if self._QualityRenderId is None:
             self._QualityRenderId = \
                 self.ScheduleEvery(500, self._QualityRender)
 
@@ -770,7 +681,8 @@ class PaneFrame(EventHandler.EventHandler):
         if not EventHandler.EventHandler.HandleEvent(self, event):
             returnval = None
 
-        self.RenderAll()
+        ## JDG self.RenderAll()
+        self.Render()
 
         return returnval
 
@@ -802,7 +714,7 @@ class PaneFrame(EventHandler.EventHandler):
                     rendereredframes.append(frame)
                 frame._RenderWindow.SwapBuffersOn()
             except:
-                logging.exception("PaneFrame")
+                logger.exception("PaneFrame")
         for frame in rendereredframes:
             frame._RenderWindow.Frame()
 
@@ -813,6 +725,7 @@ class PaneFrame(EventHandler.EventHandler):
         for pane in self._RenderPanes:
             if pane.HasChangedSince(pane.GetRenderTime()):
                 renderneeded = 1
+                break
         if renderneeded:
             self._RenderWindow.Render()
             self._RenderFTime = time.time()
@@ -859,9 +772,11 @@ def RenderAll():
 
     rendereredframes = []
     for frame in PaneFrame.AllPaneFrames:
-        frame._RenderWindow.SwapBuffersOff()
-        if (frame.Render()):
-            rendereredframes.append(frame)
-        frame._RenderWindow.SwapBuffersOn()
+        if frame._RenderWindow:
+            frame._RenderWindow.SwapBuffersOff()
+            if (frame.Render()):
+                rendereredframes.append(frame)
+            frame._RenderWindow.SwapBuffersOn()
     for frame in rendereredframes:
-        frame._RenderWindow.Frame()
+        if frame._RenderWindow:
+            frame._RenderWindow.Frame()

@@ -1,3 +1,5 @@
+from __future__ import division
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -36,6 +38,8 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from builtins import range
+from past.utils import old_div
 __rcs_info__ = {
     #
     #  Creation Information
@@ -81,7 +85,7 @@ Public Methods:
 
 """
 #======================================
-from ActorFactory import *
+from .ActorFactory import *
 import vtk
 import math
 
@@ -156,7 +160,7 @@ class PlaneOutlineFactory(ActorFactory):
         v = camera.GetViewPlaneNormal()
 
         if camera.GetParallelProjection():
-            d = camera.GetParallelScale() / 100
+            d = old_div(camera.GetParallelScale(), 100)
         else:
             d = camera.GetDistance() * \
                 math.sin(camera.GetViewAngle() / 360.0 * math.pi) / 100
@@ -174,7 +178,7 @@ class PlaneOutlineFactory(ActorFactory):
     def SetColor(self, *args):
         if len(args) == 1:
             args = args[0]
-        apply(self._Property.SetColor, args)
+        self._Property.SetColor(*args)
 
     def GetColor(self):
         return self._Property.GetColor()

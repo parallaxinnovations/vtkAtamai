@@ -1,3 +1,6 @@
+from __future__ import division
+from __future__ import print_function
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -36,6 +39,9 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from builtins import map
+from builtins import range
+from past.utils import old_div
 __rcs_info__ = {
     #
     #  Creation Information
@@ -70,8 +76,8 @@ ImagePane - high-quality image viewer
 """
 
 import vtk
-import RenderPane
-import EventHandler
+from . import RenderPane
+from . import EventHandler
 import math
 import time
 
@@ -123,8 +129,12 @@ class vtkImageActor2(vtk.vtkActor):
     def SetInput(self, input):
         self._ImagePad.SetInput(input)
 
-    def GetInput(self):
-        return self._ImagePad.GetInput()
+    def GetInputData(self):
+        # VTK-6
+        if vtk.vtkVersion().GetVTKMajorVersion() > 5:
+            return self._ImagePad.GetInputData()
+        else:
+            return self._ImagePad.GetInput()
 
     def SetInterpolate(self, interp):
         self._Texture.SetInterpolate(interp)
@@ -287,7 +297,7 @@ class ImagePane(RenderPane.RenderPane):
         table.SetTableRange(0, 1)
         table.Build()
         for i in range(256):
-            table.SetTableValue(i, i / 255.0, i / 255.0, i / 255.0, 1.0)
+            table.SetTableValue(i, old_div(i, 255.0), old_div(i, 255.0), old_div(i, 255.0), 1.0)
 
         color = vtk.vtkImageMapToColors()
         color.SetInput(reslice.GetOutput())
@@ -791,7 +801,7 @@ class ImagePane(RenderPane.RenderPane):
 
         # reset to match the new input if this is the base input
         input.UpdateInformation()
-        nspacing = min(map(abs, input.GetSpacing()))
+        nspacing = min(list(map(abs, input.GetSpacing())))
         width, height = self.GetRenderer().GetSize()
 
         bounds = self.GetTransformedBounds()
@@ -802,9 +812,9 @@ class ImagePane(RenderPane.RenderPane):
                       0, height - 1,
                       0, 0)
         else:
-            extent = (0, int(math.floor((bounds[1] - bounds[0]) / nspacing + 0.5)) - 1,
+            extent = (0, int(math.floor(old_div((bounds[1] - bounds[0]), nspacing) + 0.5)) - 1,
                       0, int(
-                          math.floor((bounds[3] - bounds[2]) / nspacing + 0.5)) - 1,
+                          math.floor(old_div((bounds[3] - bounds[2]), nspacing) + 0.5)) - 1,
                       0, 0)
 
         reslice = self._ImageReslice[i]
@@ -897,7 +907,7 @@ class ImagePane(RenderPane.RenderPane):
     def GetRenderingMode(self):
         """w.GetRenderingMode()  -- get the current rendering mode
         """
-        for pair in self._RenderingModes.items():
+        for pair in list(self._RenderingModes.items()):
             if pair[1] == self._RenderingMode:
                 return pair[0]
 
@@ -920,7 +930,7 @@ class ImagePane(RenderPane.RenderPane):
     def GetInterpolationMode(self):
         """w.GetInterpolationMode()  -- get the current interpolation mode
         """
-        for pair in self._InterpolationModes.items():
+        for pair in list(self._InterpolationModes.items()):
             if pair[1] == self._InterpolationMode:
                 return pair[0]
 
@@ -935,7 +945,7 @@ class ImagePane(RenderPane.RenderPane):
     def GetDynamicInterpolationMode(self):
         """w.GetDynamicInterpolationMode()  -- get the dynamic interpolation
         """
-        for pair in self._InterpolationModes.items():
+        for pair in list(self._InterpolationModes.items()):
             if pair[1] == self._DynamicInterpolationMode:
                 return pair[0]
 
@@ -1007,9 +1017,9 @@ class ImagePane(RenderPane.RenderPane):
 
         position = self.GetImageCoords3D(dx, dy)
 
-        indices = ((position[0] - origin[0]) / spacing[0],
-                   (position[1] - origin[1]) / spacing[1],
-                   (position[2] - origin[2]) / spacing[2])
+        indices = (old_div((position[0] - origin[0]), spacing[0]),
+                   old_div((position[1] - origin[1]), spacing[1]),
+                   old_div((position[2] - origin[2]), spacing[2]))
 
         return indices
 
@@ -1064,7 +1074,7 @@ class ImagePane(RenderPane.RenderPane):
         input = reslice.GetInput()
         input.UpdateInformation()
         inSpacing = input.GetSpacing()
-        inExtent = input.GetWholeExtent()
+        inExtent = input.GetExtent()  # VTK 6
         inOrigin = input.GetOrigin()
 
         inCenter = [0.0, 0.0, 0.0]
@@ -1099,7 +1109,7 @@ class ImagePane(RenderPane.RenderPane):
                 d = d + tmp * abs(inSpacing[j]) * (inExtent[2 * j + 1] -
                                                    inExtent[2 * j])
                 r = r + tmp * tmp
-            d = d / r
+            d = old_div(d, r)
             bounds[2 * i] = c - 0.5 * d
             bounds[2 * i + 1] = c + 0.5 * d
 
@@ -1134,7 +1144,7 @@ class ImagePane(RenderPane.RenderPane):
                 tmp = abs(matrix.GetElement(j, i))
                 spacing[i] = spacing[i] + tmp * abs(inSpacing[j])
                 r = r + tmp * tmp
-            spacing[i] = spacing[i] / r
+            spacing[i] = old_div(spacing[i], r)
 
         return tuple(spacing)
 
@@ -1218,7 +1228,7 @@ class ImagePane(RenderPane.RenderPane):
         s = self.GetTransformedSpacing()[2]
         if s == 0:
             return 0
-        return (o - ol) / s
+        return old_div((o - ol), s)
 
     def SetSlice(self, i):
         """w.SetSlice(i)  -- set which slice to view
@@ -1303,8 +1313,8 @@ class ImagePane(RenderPane.RenderPane):
         xl, xh, yl, yh = self.GetTransformedBounds()[0:4]
         sx, sy = self.GetTransformedSpacing()[0:2]
 
-        return ((xc - xl) / sx,
-                (yc - yl) / sy)
+        return (old_div((xc - xl), sx),
+                old_div((yc - yl), sy))
 
     def SetCenterPixel(self, *args):
         """w.SetCenterPixel(x,y)  -- set (x,y) indices for the window center
@@ -1349,7 +1359,7 @@ class ImagePane(RenderPane.RenderPane):
         #   This may need to be changed to the lines below
         # s0 = min(self.GetTransformedSpacing()[0:1])
         # s1 = min(self._ImageReslice[0].GetOutputSpacing()[0:1])
-        return s0 / s1
+        return old_div(s0, s1)
 
     def SetScale(self, s):
         """w.SetScale(s)  -- set the image magnification factor
@@ -1357,7 +1367,7 @@ class ImagePane(RenderPane.RenderPane):
         This sets the ratio of the smallest of the three voxel
         dimensions to the size of a display pixel.
         """
-        newspacing = min(self.GetTransformedSpacing()) / s
+        newspacing = old_div(min(self.GetTransformedSpacing()), s)
 
         reslice = self._ImageReslice[0]
         extent = reslice.GetOutputExtent()
@@ -1393,7 +1403,7 @@ class ImagePane(RenderPane.RenderPane):
             if f1 > f2:
                 pane.SetCoordScale(cs * f1)
             else:
-                pane.SetCoordScale(cs / f2)
+                pane.SetCoordScale(old_div(cs, f2))
 
     def GetCenterCoords(self):
         """w.GetCenterCoords()  -- return the window center in data coords
@@ -1428,9 +1438,9 @@ class ImagePane(RenderPane.RenderPane):
         bounds = self.GetTransformedBounds()
         spacing = self.GetTransformedSpacing()
 
-        i = (x - bounds[0]) / spacing[0]
-        j = (y - bounds[2]) / spacing[1]
-        k = (z - bounds[4]) / spacing[2]
+        i = old_div((x - bounds[0]), spacing[0])
+        j = old_div((y - bounds[2]), spacing[1])
+        k = old_div((z - bounds[4]), spacing[2])
 
         self._SetCenterPixel((i, j))
         self._SetSlice(k)
@@ -1445,7 +1455,7 @@ class ImagePane(RenderPane.RenderPane):
 
         The screen pixels are assumed to be square.
         """
-        self.SetScale(min(self.GetTransformedSpacing()) / s)
+        self.SetScale(old_div(min(self.GetTransformedSpacing()), s))
 
     def _UpdateCamera(self):
         """v._UpdateCamera()  -- update camera position
@@ -1492,7 +1502,7 @@ class ImagePane(RenderPane.RenderPane):
             origin = imatrix.MultiplyDoublePoint(origin)
             spacing = input.GetSpacing() + (0.0,)
             spacing = imatrix.MultiplyDoublePoint(spacing)
-            extent = input.GetWholeExtent()
+            extent = input.GetExtent()
 
             v = map(abs,matrix.MultiplyDoublePoint((1,0,0,0)))
             i = v.index(max(v))
@@ -1513,20 +1523,20 @@ class ImagePane(RenderPane.RenderPane):
             spacing = list(self.GetTransformedSpacing(i))
             bounds = self.GetTransformedBounds(i)
             origin = [bounds[0], bounds[2], zorigin]
-            extent = [0, int(math.floor((bounds[1] - bounds[0]) / spacing[0]
+            extent = [0, int(math.floor(old_div((bounds[1] - bounds[0]), spacing[0])
                                         + 0.5)),
-                      0, int(math.floor((bounds[3] - bounds[2]) / spacing[1]
+                      0, int(math.floor(old_div((bounds[3] - bounds[2]), spacing[1])
                                         + 0.5)),
                       0, 0]
 
             if extent[1] + 1 > 1024:
-                size = int(math.ceil((extent[1] + 1) / 1024.0))
-                extent[1] = (extent[1] + 1) / size - 1
+                size = int(math.ceil(old_div((extent[1] + 1), 1024.0)))
+                extent[1] = old_div((extent[1] + 1), size) - 1
                 spacing[0] = spacing[0] * size
 
             if extent[3] + 1 > 1024:
-                size = int(math.ceil((extent[3] + 1) / 1024.0))
-                extent[3] = (extent[3] + 1) / size - 1
+                size = int(math.ceil(old_div((extent[3] + 1), 1024.0)))
+                extent[3] = old_div((extent[3] + 1), size) - 1
                 spacing[1] = spacing[1] * size
 
             reslice2.SetOutputSpacing(spacing)
@@ -1612,7 +1622,7 @@ class ImagePane(RenderPane.RenderPane):
             if f1 > f2:
                 pane.SetCoordScale(cs * f1)
             else:
-                pane.SetCoordScale(cs / f2)
+                pane.SetCoordScale(old_div(cs, f2))
 
         RenderPane.RenderPane.DoEndMotion(self, event)
 
@@ -1645,8 +1655,8 @@ class ImagePane(RenderPane.RenderPane):
 
         reslice = self._ImageReslice[0]
 
-        delta = (y - self._LastY) * (reslice.GetOutputSpacing()[2] /
-                                     self.GetTransformedSpacing()[2])
+        delta = (y - self._LastY) * (old_div(reslice.GetOutputSpacing()[2],
+                                     self.GetTransformedSpacing()[2]))
 
         if self._LastY == self._StartY:
             self._Slice = self.GetSlice()
@@ -1664,7 +1674,7 @@ class ImagePane(RenderPane.RenderPane):
         self.DynamicOn()
 
         zoomFactor = math.pow(1.02, (0.5 * (self._LastY - y)))
-        self.SetScale(self.GetScale() / zoomFactor)
+        self.SetScale(old_div(self.GetScale(), zoomFactor))
 
         self._LastX = x
         self._LastY = y
@@ -1676,8 +1686,8 @@ class ImagePane(RenderPane.RenderPane):
         r = math.sqrt(dx ** 2 + dy ** 2)
         if r == 0:
             return
-        dx = dx / r
-        dy = dy / r
+        dx = old_div(dx, r)
+        dy = old_div(dy, r)
 
         self._InOblique = 1
         self.DynamicOn()
@@ -1882,11 +1892,11 @@ class ImagePane(RenderPane.RenderPane):
         if scale >= 1:
             scale = math.floor(scale + 0.5) + 1
         else:
-            scale = math.floor(1 / scale + 0.5) - 1
+            scale = math.floor(old_div(1, scale) + 0.5) - 1
             if scale < 1:
                 scale = 2.0
             else:
-                scale = 1.0 / scale
+                scale = old_div(1.0, scale)
 
         self.SyncSetScale(scale)
 
@@ -1900,8 +1910,8 @@ class ImagePane(RenderPane.RenderPane):
             if scale < 1:
                 scale = 0.5
         else:
-            scale = math.floor(1 / scale + 0.5) + 1
-            scale = 1.0 / scale
+            scale = math.floor(old_div(1, scale) + 0.5) + 1
+            scale = old_div(1.0, scale)
 
         self.SyncSetScale(scale)
 
@@ -1909,9 +1919,9 @@ class ImagePane(RenderPane.RenderPane):
         self.Reset()
 
     def DoPrintPixel(self, event):
-        print self.GetImageCoords3D(event.x, event.y), \
+        print(self.GetImageCoords3D(event.x, event.y), \
             self.GetImageCoords2D(event.x, event.y), \
-            self.GetImageValue(event.x, event.y)
+            self.GetImageValue(event.x, event.y))
 
     def DoSwitchRenderingMode(self, event):
         if self.GetRenderingMode() == 'Texture':

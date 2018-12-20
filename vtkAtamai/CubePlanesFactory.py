@@ -1,3 +1,5 @@
+from __future__ import division
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -36,6 +38,8 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from builtins import range
+from past.utils import old_div
 __rcs_info__ = {
     #
     #  Creation Information
@@ -77,8 +81,8 @@ Initialization:
 """
 
 #======================================
-from ActorFactory import *
-from SlicePlaneFactory import *
+from .ActorFactory import *
+from .SlicePlaneFactory import *
 import math
 
 #======================================
@@ -306,9 +310,9 @@ class CubePlanesFactory(ActorFactory):
         # p0 = self._Plane.GetOrigin()
         p1 = self._Plane.GetPoint1()
         p2 = self._Plane.GetPoint2()
-        center = [(p1[0] + p2[0]) / 2.0,
-                  (p1[1] + p2[1]) / 2.0,
-                  (p1[2] + p2[2]) / 2.0]
+        center = [old_div((p1[0] + p2[0]), 2.0),
+                  old_div((p1[1] + p2[1]), 2.0),
+                  old_div((p1[2] + p2[2]), 2.0)]
 
         # center = self._Plane.GetCenter()  # self.GetOrthoCenter()
         normal = self._Plane.GetNormal()
@@ -325,7 +329,7 @@ class CubePlanesFactory(ActorFactory):
         rs = math.sqrt(rv[0] * rv[0] + rv[1] * rv[1] + rv[2] * rv[2])
 
         # normalize radius vector
-        rv = [rv[0] / rs, rv[1] / rs, rv[2] / rs]
+        rv = [old_div(rv[0], rs), old_div(rv[1], rs), old_div(rv[2], rs)]
 
         # spin direction
         wn_cross_rv = (wn[1] * rv[2] - wn[2] * rv[1],
@@ -376,7 +380,7 @@ class CubePlanesFactory(ActorFactory):
         renderer.SetDisplayPoint(event.x, event.y, z)
         renderer.DisplayToWorld()
         wx, wy, wz, w = renderer.GetWorldPoint()
-        wx, wy, wz = (wx / w, wy / w, wz / w)
+        wx, wy, wz = (old_div(wx, w), old_div(wy, w), old_div(wz, w))
 
         # mouse motion vector, in world coords
         dx, dy, dz = (wx - lx, wy - ly, wz - lz)
@@ -385,9 +389,9 @@ class CubePlanesFactory(ActorFactory):
         # p0 = self._Plane.GetOrigin()
         p1 = self._Plane.GetPoint1()
         p2 = self._Plane.GetPoint2()
-        center = [(p1[0] + p2[0]) / 2.0,
-                  (p1[1] + p2[1]) / 2.0,
-                  (p1[2] + p2[1]) / 2.0]
+        center = [old_div((p1[0] + p2[0]), 2.0),
+                  old_div((p1[1] + p2[1]), 2.0),
+                  old_div((p1[2] + p2[1]), 2.0)]
         normal = self._Plane.GetNormal()
 
         # after transform
@@ -465,7 +469,7 @@ class CubePlanesFactory(ActorFactory):
         renderer.SetDisplayPoint(event.x, event.y, z)
         renderer.DisplayToWorld()
         wx, wy, wz, w = renderer.GetWorldPoint()
-        wx, wy, wz = (wx / w, wy / w, wz / w)
+        wx, wy, wz = (old_div(wx, w), old_div(wy, w), old_div(wz, w))
 
         # mouse motion vector, in world coords
         dx, dy, dz = (wx - lx, wy - ly, wz - lz)
@@ -477,8 +481,8 @@ class CubePlanesFactory(ActorFactory):
 
         if (abs(n_dot_v) < 0.9):
             # drag plane to exactly match cursor motion
-            dd = (dx * (nx - vx * n_dot_v) + dy * (ny - vy * n_dot_v) +
-                  dz * (nz - vz * n_dot_v)) / (1.0 - n_dot_v * n_dot_v)
+            dd = old_div((dx * (nx - vx * n_dot_v) + dy * (ny - vy * n_dot_v) +
+                  dz * (nz - vz * n_dot_v)), (1.0 - n_dot_v * n_dot_v))
         else:
             # plane is perpendicular to viewing ray, so just push by distance
             dd = math.sqrt(dx * dx + dy * dy + dz * dz)
@@ -496,7 +500,7 @@ class CubePlanesFactory(ActorFactory):
         else:
             # do the push and find the fraction of the push that was done,
             # in case we hit bounds
-            f = self._Plane.Push(dd) / dd
+            f = old_div(self._Plane.Push(dd), dd)
 
         if (f < 0.9999):
             # hit bounds: set LastX,LastY appropriately
@@ -694,7 +698,7 @@ class CubePlanesFactory(ActorFactory):
 
     def _CalcBounds(self, input):
         input.UpdateInformation()
-        extent = input.GetWholeExtent()
+        extent = input.GetExtent()  # VTK 6
         origin = input.GetOrigin()
         spacing = input.GetSpacing()
 

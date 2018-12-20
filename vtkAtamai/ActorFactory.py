@@ -1,3 +1,5 @@
+from __future__ import print_function
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -35,6 +37,7 @@
 #
 # This file represents a derivative work by Parallax Innovations Inc.
 #
+from builtins import object
 __rcs_info__ = {
     #
     #  Creation Information
@@ -265,12 +268,14 @@ A little extra info about child components:
 """
 
 #======================================
-from zope import interface
+from zope.interface import implementer
 from vtkAtamai.interfaces import IActorFactory
-import EventHandler
-import PaneFrame
+from . import EventHandler
+from . import PaneFrame
 import vtk
 import logging
+
+logger = logging.getLogger(__name__)
 
 #======================================
 
@@ -287,6 +292,7 @@ class PickInformation(object):
         #    (i.e. a vector perpendicular to the normal)
 
 
+@implementer(IActorFactory)
 class ActorFactory(EventHandler.EventHandler):
 
     """The base type for virtual objects that are displayed on the screen.
@@ -300,8 +306,6 @@ class ActorFactory(EventHandler.EventHandler):
     the inherited EventHandler class.
 
     """
-
-    interface.implements(IActorFactory)
 
     def __init__(self):
         EventHandler.EventHandler.__init__(self)
@@ -340,7 +344,7 @@ class ActorFactory(EventHandler.EventHandler):
         self.RemoveAllEventHandlers()
 
         # remove additional actors
-        for renderer in self._ActorDict.keys():
+        for renderer in list(self._ActorDict.keys()):
             self.RemoveFromRenderer(renderer)
             del(self._ActorDict[renderer])
 
@@ -354,7 +358,7 @@ class ActorFactory(EventHandler.EventHandler):
     # from the RenderPanes anyway.
 
     def __del__(self):
-        print 'deleting {0}'.format(self.__class__)
+        print('deleting {0}'.format(self.__class__))
 
         for renderer in self._Renderers:
             self.RemoveFromRenderer(renderer)
@@ -366,7 +370,7 @@ class ActorFactory(EventHandler.EventHandler):
 
         # handle dictionaries
         if isinstance(actors, dict):
-            actors_list = actors.values()
+            actors_list = list(actors.values())
         else:
             actors_list = actors
 
@@ -497,7 +501,7 @@ class ActorFactory(EventHandler.EventHandler):
             actors = self._ActorDict[renderer]
             if isinstance(actors, dict):
                 # new (dictionary)
-                actors = actors.values()
+                actors = list(actors.values())
             else:
                 # class (list?)
                 actors = list(actors)
@@ -532,11 +536,15 @@ class ActorFactory(EventHandler.EventHandler):
         """
         picklist = []
 
+        if event.renderer not in self._ActorDict:
+            logger.warning('event renderer not in actor dictionary')
+            return []
+
         actors = self._ActorDict[event.renderer]
 
         # handle new-style actor dictionary
         if isinstance(actors, dict):
-            actors = actors.values()
+            actors = list(actors.values())
 
         if actors:
             pickedActors = event.picker.GetProp3Ds()

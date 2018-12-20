@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -84,7 +85,7 @@ Initialization:
 """
 
 #======================================
-from Widget import *
+from .Widget import *
 import vtk
 
 #======================================
@@ -93,7 +94,7 @@ import vtk
 class Frame(Widget):
 
     def __init__(self, parent=None, borderwidth=0, relief='raised', **kw):
-        apply(Widget.__init__, (self, parent), kw)
+        Widget.__init__(*(self, parent), **kw)
 
         self._Config['borderwidth'] = borderwidth
         self._Config['relief'] = relief

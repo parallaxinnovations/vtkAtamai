@@ -30,6 +30,8 @@ TO, LOSS OF DATA OR DATA BECOMING INACCURATE OR LOSS OF PROFIT OR
 BUSINESS INTERRUPTION) ARISING IN ANY WAY OUT OF THE USE OR INABILITY TO
 USE THE SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
 """
+from __future__ import division
+from __future__ import absolute_import
 
 #
 # This file represents a derivative work by Parallax Innovations Inc.
@@ -40,8 +42,11 @@ USE THE SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
 # the file name to OldVolumePlanesFactory.py to co-exist with the latest
 # version. H.Q.
 
-from ActorFactory import *
-from ClippingCubeFactory import *
+from builtins import map
+from builtins import range
+from past.utils import old_div
+from .ActorFactory import *
+from .ClippingCubeFactory import *
 
 import math
 
@@ -190,7 +195,7 @@ class VolumePlanesFactory(ActorFactory):
 
     def OnRenderEvent(self, renderer, vtkevent):
         normal = renderer.GetActiveCamera().GetViewPlaneNormal()
-        absNormal = map(abs, normal)
+        absNormal = list(map(abs, normal))
         plane = absNormal.index(max(absNormal))
         oldPlane = self._RendererCurrentIndex[renderer]
         allPlanes = self._RendererActorList[renderer]
@@ -240,14 +245,14 @@ class VolumePlanesFactory(ActorFactory):
 
         self._ImagePrefilter.SetInput(input)
         self._ImagePrefilter.SetStandardDeviations(
-            resliceSpacing[0] / spacing[0],
-            resliceSpacing[
-                1] / spacing[1],
-            resliceSpacing[2] / spacing[2])
-        self._ImagePrefilter.SetRadiusFactors(resliceSpacing[0] / spacing[0] - 0.5,
-                                              resliceSpacing[
-                                                  1] / spacing[1] - 0.5,
-                                              resliceSpacing[2] / spacing[2] - 0.5)
+            old_div(resliceSpacing[0], spacing[0]),
+            old_div(resliceSpacing[
+                1], spacing[1]),
+            old_div(resliceSpacing[2], spacing[2]))
+        self._ImagePrefilter.SetRadiusFactors(old_div(resliceSpacing[0], spacing[0]) - 0.5,
+                                              old_div(resliceSpacing[
+                                                  1], spacing[1]) - 0.5,
+                                              old_div(resliceSpacing[2], spacing[2]) - 0.5)
 
         self._ImageReslice.SetInput(self._ImagePrefilter.GetOutput())
         self._ImageReslice.SetInput(input)
@@ -333,11 +338,11 @@ class VolumePlanesFactory(ActorFactory):
             pathlength = math.sqrt(vec[0] ** 2 + vec[1] ** 2 + vec[2] ** 2)
 
             # get mininum voxel spacing
-            spacing = min(map(abs, self._Input.GetSpacing()))
+            spacing = min(list(map(abs, self._Input.GetSpacing())))
 
             # get the number of steps required along the length
-            N = int(math.ceil(abs(pathlength / spacing)))
-            dx, dy, dz = (vec[0] / N, vec[1] / N, vec[2] / N)
+            N = int(math.ceil(abs(old_div(pathlength, spacing))))
+            dx, dy, dz = (old_div(vec[0], N), old_div(vec[1], N), old_div(vec[2], N))
 
             # set up an implicit function that we can query
             vol = self._ImplicitVolume
@@ -355,7 +360,7 @@ class VolumePlanesFactory(ActorFactory):
                 x = x0 + i * dx
                 y = y0 + i * dy
                 z = z0 + i * dz
-                value = vol.FunctionValue(x + dx / 2, y + dy / 2, z + dz / 2)
+                value = vol.FunctionValue(x + old_div(dx, 2), y + old_div(dy, 2), z + old_div(dz, 2))
                 idx = int(
                     round((value - range[0]) / (range[1] - range[0]) * maxidx))
                 if idx < 0:
@@ -380,7 +385,7 @@ class VolumePlanesFactory(ActorFactory):
                     y = y1 - i * dy
                     z = z1 - i * dz
                     value = vol.FunctionValue(
-                        x - dx / 2, y - dy / 2, z - dz / 2)
+                        x - old_div(dx, 2), y - old_div(dy, 2), z - old_div(dz, 2))
                     idx = int(round((value - range[
                               0]) / (range[1] - range[0]) * maxidx))
                     if idx < 0:
@@ -417,7 +422,7 @@ class VolumePlanesFactory(ActorFactory):
         sliceEdgeX = origin[0] + spacing[0] * (extent[1] - extent[0] + 0.5)
         sliceEdgeY = origin[1] + spacing[1] * (extent[3] - extent[2] + 0.5)
 
-        for sliceNumber in range(extent[4], (extent[5] + 1) / reduce):
+        for sliceNumber in range(extent[4], old_div((extent[5] + 1), reduce)):
             # the z position of the slice
             sliceOriginZ = origin[2] + reduce * sliceNumber * spacing[2]
 
@@ -464,7 +469,7 @@ class VolumePlanesFactory(ActorFactory):
             self._ImageClipsXY.append(imageClip)
             self._ActorsXY.append(actor)
 
-        numberOfPlanes = (extent[5] - extent[4] + 1) / reduce
+        numberOfPlanes = old_div((extent[5] - extent[4] + 1), reduce)
         return self._ActorsXY[-numberOfPlanes:]
 
     def _MakeYZActors(self, reduce=1):
@@ -481,7 +486,7 @@ class VolumePlanesFactory(ActorFactory):
         sliceEdgeY = origin[1] + spacing[1] * (extent[3] - extent[2] + 0.5)
         sliceEdgeZ = origin[2] + spacing[2] * (extent[5] - extent[4] + 0.5)
 
-        for sliceNumber in range(extent[0], (extent[1] + 1) / reduce):
+        for sliceNumber in range(extent[0], old_div((extent[1] + 1), reduce)):
             # the z position of the slice
             sliceOriginX = origin[0] + reduce * sliceNumber * spacing[0]
 
@@ -529,7 +534,7 @@ class VolumePlanesFactory(ActorFactory):
             self._ImageClipsYZ.append(imageClip)
             self._ActorsYZ.append(actor)
 
-        numberOfPlanes = (extent[1] - extent[0] + 1) / reduce
+        numberOfPlanes = old_div((extent[1] - extent[0] + 1), reduce)
         return self._ActorsYZ[-numberOfPlanes:]
 
     def _MakeZXActors(self, reduce=1):
@@ -546,7 +551,7 @@ class VolumePlanesFactory(ActorFactory):
         sliceEdgeX = origin[0] + spacing[0] * (extent[1] - extent[0] + 0.5)
         sliceEdgeZ = origin[2] + spacing[2] * (extent[5] - extent[4] + 0.5)
 
-        for sliceNumber in range(extent[2], (extent[3] + 1) / reduce):
+        for sliceNumber in range(extent[2], old_div((extent[3] + 1), reduce)):
             # the z position of the slice
             sliceOriginY = origin[1] + reduce * sliceNumber * spacing[1]
 
@@ -594,7 +599,7 @@ class VolumePlanesFactory(ActorFactory):
             self._ImageClipsZX.append(imageClip)
             self._ActorsZX.append(actor)
 
-        numberOfPlanes = (extent[3] - extent[2] + 1) / reduce
+        numberOfPlanes = old_div((extent[3] - extent[2] + 1), reduce)
         return self._ActorsZX[-numberOfPlanes:]
 
     def _MakeAllActors(self):

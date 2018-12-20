@@ -4,15 +4,20 @@ UltrasoundProbeFactory - a tracked ultrasound probe
   This class is highly experimental.
 
 """
+from __future__ import division
+from __future__ import absolute_import
 
-from TrackedInstrumentFactory import *
-from SlicePlaneFactory import *
-from ImagePlaneFactory import *
+from builtins import range
+from past.utils import old_div
+from .TrackedInstrumentFactory import *
+from .SlicePlaneFactory import *
+from .ImagePlaneFactory import *
 import math
 try:
     import atexit
 except:
     import sys
+import atexit
 
 
 class UltrasoundProbeFactory(TrackedInstrumentFactory):
@@ -33,13 +38,13 @@ class UltrasoundProbeFactory(TrackedInstrumentFactory):
         try:
             atexit.register(self.__Video.ReleaseSystemResources)
         except:
-            sys.exitfunc = self.__Video.ReleaseSystemResources
+            atexit.register(self.__Video.ReleaseSystemResources)
 
         self.__Video.SetFrameSize(320, 240, 1)
         self.__Video.SetOutputFormatToLuminance()
         self.__Video.SetClipRegion(0, 255, 0, 240, 0, 0)
         self.__Video.SetOutputWholeExtent(0, 255, 0, 255, 0, 0)
-        self.__Video.SetDataSpacing(2 / 4.79, -2 / 4.9, 0.5)
+        self.__Video.SetDataSpacing(old_div(2, 4.79), old_div(-2, 4.9), 0.5)
         self.__Video.SetDataOrigin(-58.48, 87.76, 0.0)
         self.__Video.SetFrameRate(10)
 
@@ -97,10 +102,10 @@ class UltrasoundProbeFactory(TrackedInstrumentFactory):
             points = vtk.vtkPoints()
             cells = vtk.vtkCellArray()
             polyline = vtk.vtkCellArray()
-            vertices = [(-w / 2.0, 0, 0),
-                        (-w / 2.0, h, 0),
-                        (w / 2.0, h, 0),
-                        (w / 2.0, 0, 0)]
+            vertices = [(old_div(-w, 2.0), 0, 0),
+                        (old_div(-w, 2.0), h, 0),
+                        (old_div(w, 2.0), h, 0),
+                        (old_div(w, 2.0), 0, 0)]
             cells.InsertNextCell(4)
             polyline.InsertNextCell(5)
             for i in range(4):

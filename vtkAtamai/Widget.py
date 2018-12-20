@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -36,6 +37,7 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from builtins import range
 __rcs_info__ = {
     #
     #  Creation Information
@@ -139,7 +141,7 @@ Protected Members:
 """
 
 #======================================
-from EventHandler import *
+from .EventHandler import *
 import vtk
 
 
@@ -194,9 +196,9 @@ class Widget(EventHandler):
             alpha = color[3]
 
         color = list(color[0:3])
-        select = map(lambda x: x * 1.10, color)
-        shadow = map(lambda x: x * 0.59, color)
-        light = map(lambda x: x * 1.15, color)
+        select = [x * 1.10 for x in color]
+        shadow = [x * 0.59 for x in color]
+        light = [x * 1.15 for x in color]
 
         colors = (color, select, shadow, light)
 
@@ -204,7 +206,7 @@ class Widget(EventHandler):
             for j in range(3):
                 if colors[i][j] > 1.0:
                     colors[i][j] = 1.0
-            apply(self._LookupTable.SetTableValue, [i] + colors[i] + [alpha])
+            self._LookupTable.SetTableValue(*[i] + colors[i] + [alpha])
 
     #--------------------------------------
     def HasChangedSince(self, sinceMTime):
@@ -377,7 +379,7 @@ class Widget(EventHandler):
 
     #--------------------------------------
     def Configure(self, **kw):
-        keys = kw.keys()
+        keys = list(kw.keys())
 
         for key in keys:
             # throw an exception if key doesn't exist

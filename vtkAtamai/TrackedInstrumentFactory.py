@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -36,6 +37,7 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from builtins import range
 __rcs_info__ = {
     #
     #  Creation Information
@@ -147,7 +149,7 @@ Public Methods:
 """
 
 #======================================
-from ActorFactory import *
+from .ActorFactory import *
 
 #======================================
 
@@ -200,27 +202,27 @@ class TrackedInstrumentFactory(ActorFactory):
         self._TrackerTool.LED2Flash()
         if (self._OriginalColor == None):
             self._OriginalColor = self._WarningProperty.GetColor()
-        apply(self._WarningProperty.SetColor, self._OOBColor)
+        self._WarningProperty.SetColor(*self._OOBColor)
         self.Modified()
 
     def DoEnterBounds(self, event):
         self._TrackerTool.LED2Off()
-        apply(self._WarningProperty.SetColor, self._OriginalColor)
+        self._WarningProperty.SetColor(*self._OriginalColor)
         self.Modified()
 
     def DoLeaveView(self, event):
         self._TrackerTool.LED1Flash()
         if (self._OriginalColor == None):
             self._OriginalColor = self._WarningProperty.GetColor()
-        apply(self._WarningProperty.SetColor, self._OOVColor)
+        self._WarningProperty.SetColor(*self._OOVColor)
         self.Modified()
 
     def DoEnterView(self, event):
         self._TrackerTool.LED1On()
         if (event.state & 8192):  # tool is out-of-bounds
-            apply(self._WarningProperty.SetColor, self._OOBColor)
+            self._WarningProperty.SetColor(*self._OOBColor)
         else:
-            apply(self._WarningProperty.SetColor, self._OriginalColor)
+            self._WarningProperty.SetColor(*self._OriginalColor)
         self.Modified()
 
     #--------------------------------------

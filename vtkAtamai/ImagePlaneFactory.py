@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -36,6 +37,7 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from builtins import range
 __rcs_info__ = {
     #
     #  Creation Information
@@ -123,7 +125,7 @@ Public Methods:
 """
 
 import math
-from ActorFactory import *
+from .ActorFactory import *
 
 
 class ImagePlaneFactory(ActorFactory):
@@ -294,7 +296,7 @@ class ImagePlaneFactory(ActorFactory):
         except:
             input.UpdateImageInformation()
 
-        extent = input.GetWholeExtent()
+        extent = input.GetExtent()  # VTK 6
         origin = input.GetOrigin()
         spacing = input.GetSpacing()
 
@@ -369,7 +371,7 @@ class ImagePlaneFactory(ActorFactory):
 
             spacing = input.GetSpacing()
             origin = input.GetOrigin()
-            extent = input.GetWholeExtent()
+            extent = input.GetExtent()  # VTK 6
 
             spacingX = spacing[0]
             spacingY = spacing[1]

@@ -61,7 +61,10 @@ Public Methods:
   GetColor()         -- get the color
 
 """
+from __future__ import division
 #======================================
+from builtins import range
+from past.utils import old_div
 from vtkAtamai.ActorFactory import *
 
 import math
@@ -145,7 +148,7 @@ class PlaneGuideFactory(ActorFactory):
         v = camera.GetViewPlaneNormal()
 
         if camera.GetParallelProjection():
-            d = camera.GetParallelScale() / 100
+            d = old_div(camera.GetParallelScale(), 100)
         else:
             d = camera.GetDistance() * \
                 math.sin(camera.GetViewAngle() / 360.0 * math.pi) / 100
@@ -163,7 +166,7 @@ class PlaneGuideFactory(ActorFactory):
     def SetColor(self, *args):
         if len(args) == 1:
             args = args[0]
-        apply(self._Property.SetColor, args)
+        self._Property.SetColor(*args)
 
     def GetColor(self):
         return self._Property.GetColor()

@@ -1,3 +1,6 @@
+from __future__ import division
+from __future__ import print_function
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -36,6 +39,7 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from past.utils import old_div
 __rcs_info__ = {
     #
     #  Creation Information
@@ -87,9 +91,9 @@ See Also:
 
 Initialization:
 
-  RenderPane(*master*)
+  RenderPane(*parent*)
 
-  *master*  - the PaneFrame that will hold this RenderPane
+  *parent*  - the PaneFrame that will hold this RenderPane
 
 Public Methods:
 
@@ -226,22 +230,24 @@ To Do:
 
 """
 
-from zope import interface
-from interfaces import IRenderPane
+from zope.interface import implementer
+from .interfaces import IRenderPane
 import logging
 
 #======================================
-import EventHandler
-import PaneFrame
+from . import EventHandler
+from . import PaneFrame
 
 import math
 import types
 import sys
 import vtk
 
+logger = logging.getLogger(__name__)
 #======================================
 
 
+@implementer(IRenderPane)
 class RenderPane(EventHandler.EventHandler):
 
     """A rectangular window area that depicts a virtual scene.
@@ -257,16 +263,17 @@ class RenderPane(EventHandler.EventHandler):
 
     """
 
-    interface.implements(IRenderPane)
-
     def __del__(self):
-        print 'RenderPane deleted!'
+        print('RenderPane deleted!')
 
-    def __init__(self, master=None, *args, **kw):
+    def __init__(self, parent=None, *args, **kw):
         EventHandler.EventHandler.__init__(self)
 
         # the renderer associated with the pane
         self._Renderer = vtk.vtkRenderer()
+
+        # listen to changes to our camera
+        self._Renderer.GetActiveCamera().AddObserver('ModifiedEvent', self.onCameraModified)
 
         # the initial viewport
         self._Viewport = (0.0, 0.0, 1.0, 1.0)
@@ -296,13 +303,10 @@ class RenderPane(EventHandler.EventHandler):
 
         # the time of the last modification/render
         self._MTime = vtk.vtkObject()
-        #self._RenderTime = vtk.vtkObject()
-        try:  # user AddObserver in recent versions of VTK
-            startMethod = lambda o, e, s=self: s.StartRender()
-            self._Renderer.AddObserver("StartEvent", startMethod)
-        except AttributeError:
-            self._Renderer.SetStartRenderMethod(self.StartRender)
-            self._Renderer.SetEndRenderMethod(self._RenderTime.Modified)
+        self._RenderTime = vtk.vtkObject()
+        startMethod = lambda o, e, s=self: s.StartRender()
+        self._Renderer.AddObserver("StartEvent", startMethod)
+        self._Renderer.AddObserver("EndEvent", self.EndRender)
 
         # for the border around the pane
         self._BorderWidth = 0
@@ -321,20 +325,23 @@ class RenderPane(EventHandler.EventHandler):
         # create default mouse bindings
         self.BindDefaultInteraction()
 
-        # default master is a PaneFrame window
-        if master is None:
-            master = PaneFrame.PaneFrame(*args, **kw)
+        # default parent is a PaneFrame window
+        if parent is None:
+            parent = PaneFrame.PaneFrame(*args, **kw)
 
-        # keep track of master
-        self._master = master
+        # keep track of parent
+        self._parent = parent
 
-        # master can be a PaneFrame
-        if isinstance(master, PaneFrame.PaneFrame):
-            master.ConnectRenderPane(self)
+        # dicom-related stuff
+        self._direction_cosines = None
+
+        # parent can be a PaneFrame
+        if isinstance(parent, PaneFrame.PaneFrame):
+            parent.ConnectRenderPane(self)
         # or a Tk Widget
-        elif 'Tkinter' in sys.modules and hasattr(master, "tk"):
-            import tkPaneFrame
-            frame = tkPaneFrame.tkPaneFrame(master, *args, **kw)
+        elif 'Tkinter' in sys.modules and hasattr(parent, "tk"):
+            from . import tkPaneFrame
+            frame = tkPaneFrame.tkPaneFrame(parent, *args, **kw)
             frame.ConnectRenderPane(self)
             # bind a minimal set of methods to make this look like
             # a Tk widget (dynamic method declaration!)
@@ -344,33 +351,43 @@ class RenderPane(EventHandler.EventHandler):
             self.tk = frame.tk
         # or a wxWindow
         elif 'wx' in sys.modules:
-            import wxPaneFrame
-            frame = wxPaneFrame.wxPaneFrame(master, *args, **kw)
+            from . import wxPaneFrame
+            frame = wxPaneFrame.wxPaneFrame(parent, *args, **kw)
             frame.ConnectRenderPane(self)
             self.wx = frame
             # bind important methods
             self.Show = lambda i, f=frame: f.Show(i)
         # or a QWindow
         elif 'qt' in sys.modules:
-            import qtPaneFrame
-            frame = qtPaneFrame.qtPaneFrame(master, *args, **kw)
+            from . import qtPaneFrame
+            frame = qtPaneFrame.qtPaneFrame(parent, *args, **kw)
             frame.show()
             frame.ConnectRenderPane(self)
             self.qt = frame
 
-    def tearDown(self):
+    def SetDirectionCosines(self, cosines):
+        self._direction_cosines = cosines
 
+    def GetDirectionCosines(self):
+        return self._direction_cosines
+
+    def tearDown(self):
         for actor in self.GetActorFactories():
             actor.RemoveFromRenderer(self._Renderer)
         self._ActorFactories = []
 
+        # remove all Atamai event handlers
         self.RemoveAllEventHandlers()
+
+        # remove all VTK event handlers
+        self._Renderer.RemoveAllObservers()
 
         del(self._BorderPoints)
         del(self._BorderActor)
         del(self._BorderScalars)
         del(self._BorderData)
         del(self._Picker)
+        del(self._Renderer)
 
     #--------------------------------------
     def SetPointOfInterest(self, position):
@@ -402,19 +419,19 @@ class RenderPane(EventHandler.EventHandler):
 
         vx, vy, vz = (x - cx, y - cy, z - cz)
         d = math.sqrt(vx ** 2 + vy ** 2 + vz ** 2)
-        vx, vy, vz = (vx / d, vy / d, vz / d)
+        vx, vy, vz = (old_div(vx, d), old_div(vy, d), old_div(vz, d))
 
         ovx, ovy, ovz = (px - cx, py - cy, pz - cz)
         d = math.sqrt(ovx ** 2 + ovy ** 2 + ovz ** 2)
-        ovx, ovy, ovz = (ovx / d, ovy / d, ovz / d)
+        ovx, ovy, ovz = (old_div(ovx, d), old_div(ovy, d), old_div(ovz, d))
 
         theta = math.acos(vx * ovx + vy * ovy + vz * ovz) * 180 / math.pi
 
         # only shift the camera if the point of interest is 45 degrees
         # or more off center, or if the point is off-screen
         if theta > 45.0 or (w > 0 and h > 0 and
-                            ((dx - ox - 0.5) / w < 0.0 or (dx - ox - 0.5) / w > 1.0 or
-                             ((dy - oy - 0.5) / h < 0.0 or (dy - oy - 0.5) / h > 1.0))):
+                            (old_div((dx - ox - 0.5), w) < 0.0 or old_div((dx - ox - 0.5), w) > 1.0 or
+                             (old_div((dy - oy - 0.5), h) < 0.0 or old_div((dy - oy - 0.5), h) > 1.0))):
             camera.SetPosition(cx + d * vx, cy + d * vy, cz + d * vz)
 
         self.Modified()
@@ -455,18 +472,18 @@ class RenderPane(EventHandler.EventHandler):
         if modifier:
             # the modifier can be a string, or an int that actually
             # has the modifier bits set
-            if isinstance(modifier, types.IntType):
+            if isinstance(modifier, int):
                 state = modifier
                 modifier = ""
-                vals = EventHandler.EventHandler.EventModifier.values()
-                keys = EventHandler.EventHandler.EventModifier.keys()
+                vals = list(EventHandler.EventHandler.EventModifier.values())
+                keys = list(EventHandler.EventHandler.EventModifier.keys())
                 i = 0
                 while state > 0:
                     if state & 1:
                         modifier = modifier + \
                             keys[vals.index(1 << i)] + "-"
                     i = i + 1
-                    state = state / 2
+                    state = old_div(state, 2)
             else:
                 modifier = modifier + "-"
         else:
@@ -539,7 +556,7 @@ class RenderPane(EventHandler.EventHandler):
                               button, modifier)
 
     #--------------------------------------
-    def HandleEvent(self, event):
+    def HandleEvent(self, evt):
         """Do special event processing required for the RenderPane.
 
         The events are usually generated by a window (i.e. a PaneFrame
@@ -559,35 +576,35 @@ class RenderPane(EventHandler.EventHandler):
         # self.PrintEvent(event)
 
         # add 'renderer' to the event
-        event.renderer = self._Renderer
-        event.pane = self
+        evt.renderer = self._Renderer
+        evt.pane = self
 
         # pass configure events to all widgets
-        if event.type == '22':  # 'Configure'
-            self._SetBorderPoints(event.width, event.height)
+        if evt.type == '22':  # 'Configure'
+            self._SetBorderPoints(evt.width, evt.height)
             for widget in self._Widgets:
-                widget.ConfigureGeometry((event.x, event.y),
-                                         (event.width, event.height))
-                widget.HandleEvent(event)
+                widget.ConfigureGeometry((evt.x, evt.y),
+                                         (evt.width, evt.height))
+                widget.HandleEvent(evt)
             self.Modified()
-            return EventHandler.EventHandler.HandleEvent(self, event)
+            return EventHandler.EventHandler.HandleEvent(self, evt)
 
-        if event.type == '7':  # 'Enter'
+        if evt.type == '7':  # 'Enter'
             self._Focus = 1
-            self.DoEnter(event)
-            self.DoCursorMotion(event)
-        elif event.type == '8':  # 'Leave'
-            self.DoLeave(event)
+            self.DoEnter(evt)
+            self.DoCursorMotion(evt)
+        elif evt.type == '8':  # 'Leave'
+            self.DoLeave(evt)
             self._Focus = 0
 
-        if event.type in ('4', '5', '6', '7', '8'):  # if this is a mouse event
+        if evt.type in ('4', '5', '6', '7', '8'):  # if this is a mouse event
             # save the mouse position
-            self._MouseX = event.x
-            self._MouseY = event.y
+            self._MouseX = evt.x
+            self._MouseY = evt.y
 
             # set current widget to the one under the mouse
             for widget in self._Widgets:
-                if widget.IsInWidget(event):
+                if widget.IsInWidget(evt):
                     newCurrentWidget = widget
                     break
             else:  # or None if not over any widget
@@ -595,9 +612,9 @@ class RenderPane(EventHandler.EventHandler):
 
             # check to see if the focus should be changed
             if (newCurrentWidget != self._FocusWidget and
-                ((event.type == '6' and event.state & 0x1f00 == 0) or
-                 (event.type == '5' and
-                  event.state & 0x1f00 & ~(0x80 << event.num) == 0))):
+                ((evt.type == '6' and evt.state & 0x1f00 == 0) or
+                 (evt.type == '5' and
+                  evt.state & 0x1f00 & ~(0x80 << evt.num) == 0))):
                 newFocusWidget = newCurrentWidget
             else:
                 newFocusWidget = self._FocusWidget
@@ -609,14 +626,14 @@ class RenderPane(EventHandler.EventHandler):
                 if self._FocusWidget:
                     # make a copy of the current event
                     e = EventHandler.Event()
-                    for attr in dir(event):
-                        setattr(e, attr, getattr(event, attr))
+                    for attr in dir(evt):
+                        setattr(e, attr, getattr(evt, attr))
                     # but change the type to 'Leave'
                     e.type = '8'  # 'Leave'
                     # and pass to the widget
                     self._FocusWidget.HandleEvent(e)
-                elif event.type not in ('7', '8'):  # 'Enter','Leave'
-                    self.DoLeave(event)
+                elif evt.type not in ('7', '8'):  # 'Enter','Leave'
+                    self.DoLeave(evt)
 
             # check to see if we entered the new FocusWidget
             if ((newCurrentWidget == self._FocusWidget and
@@ -625,36 +642,36 @@ class RenderPane(EventHandler.EventHandler):
                 if newFocusWidget:
                     # make a copy of the current event
                     e = EventHandler.Event()
-                    for attr in dir(event):
-                        setattr(e, attr, getattr(event, attr))
+                    for attr in dir(evt):
+                        setattr(e, attr, getattr(evt, attr))
                     # but change the type to 'Enter'
                     e.type = '7'  # 'Enter'
                     # and pass to the widget
                     newFocusWidget.HandleEvent(e)
-                elif event.type not in ('7', '8'):  # 'Enter','Leave'
-                    self.DoEnter(event)
+                elif evt.type not in ('7', '8'):  # 'Enter','Leave'
+                    self.DoEnter(evt)
 
-            if not self._CurrentWidget and event.type == '8':  # 'Leave'
-                self.DoLeave(event)
-            elif not newCurrentWidget and event.type == '7':  # 'Enter'
-                self.DoEnter(event)
+            if not self._CurrentWidget and evt.type == '8':  # 'Leave'
+                self.DoLeave(evt)
+            elif not newCurrentWidget and evt.type == '7':  # 'Enter'
+                self.DoEnter(evt)
 
             self._FocusWidget = newFocusWidget
             self._CurrentWidget = newCurrentWidget
 
         # pass the event to the widget that has the focus
         # 'Enter','Leave'
-        if self._FocusWidget and event.type not in ('7', '8'):
-            return self._FocusWidget.HandleEvent(event)
+        if self._FocusWidget and evt.type not in ('7', '8'):
+            return self._FocusWidget.HandleEvent(evt)
 
         # finally, pass the event to the underlying handler
         # (this could be modified so that it will send events
         # to the currently selected ActorFactory instead)
-        rval = EventHandler.EventHandler.HandleEvent(self, event)
+        rval = EventHandler.EventHandler.HandleEvent(self, evt)
 
         # deal with cursor motion
-        if event.type == '6':  # 'Motion'
-            self.DoCursorMotion(event)
+        if evt.type == '6':  # 'Motion'
+            self.DoCursorMotion(evt)
 
         return rval
 
@@ -735,10 +752,10 @@ class RenderPane(EventHandler.EventHandler):
         xmin, ymin, xmax, ymax = self._Viewport
         left, bottom, right, top = self._ViewportOffsets
 
-        xmin = (xmin * width + left) / width
-        xmax = (xmax * width + right) / width
-        ymin = (ymin * height + bottom) / height
-        ymax = (ymax * height + top) / height
+        xmin = old_div((xmin * width + left), width)
+        xmax = old_div((xmax * width + right), width)
+        ymin = old_div((ymin * height + bottom), height)
+        ymax = old_div((ymax * height + top), height)
 
         self._Renderer.SetViewport(xmin, ymin, xmax, ymax)
 
@@ -784,7 +801,7 @@ class RenderPane(EventHandler.EventHandler):
         return self._Renderer.GetSize()
 
     #--------------------------------------
-    def DoEnter(self, event):
+    def DoEnter(self, evt):
         """This method is called when the mouse enters the RenderPane.
 
         If a 3D cursor is set for this RenderPane, then this method causes
@@ -793,25 +810,25 @@ class RenderPane(EventHandler.EventHandler):
 
         """
 
-        # self._LastX = event.x
-        # self._LastY = event.y
+        # self._LastX = evt.x
+        # self._LastY = evt.y
         if self._CursorOnFlag and self._Focus:
             self._ShowCursor()
 
-    def DoLeave(self, event):
+    def DoLeave(self, evt):
         """This method is called when the mouse leaves the RenderPane."""
 
         # JDG
         return
 
-        # self._LastX = event.x
-        # self._LastY = event.y
+        # self._LastX = evt.x
+        # self._LastY = evt.y
         if self._CursorOnFlag and self._Focus:
             self._HideCursor()
             self.Modified()
 
     #--------------------------------------
-    def DoPickActor(self, event):
+    def DoPickActor(self, evt):
         """Find out what actor or actors are under the mouse cursor.
 
         This method can be called during a ButtonPress event to perform
@@ -835,20 +852,20 @@ class RenderPane(EventHandler.EventHandler):
 
         """
 
-        self.DoSmartPick(event)
+        self.DoSmartPick(evt)
 
         if self._PickInformationList:
             self._CurrentActor = self._PickInformationList[0].actor
             self._CurrentActorFactory = self._PickInformationList[0].factory
 
-            event.actor = self._CurrentActor
-            event.picker = self._Picker
-            self._CurrentActorFactory.HandleEvent(event)
+            evt.actor = self._CurrentActor
+            evt.picker = self._Picker
+            self._CurrentActorFactory.HandleEvent(evt)
         else:
             self._CurrentActor = None
             self._CurrentActorFactory = None
 
-    def DoReleaseActor(self, event):
+    def DoReleaseActor(self, evt):
         """Release the actor that is currently held by the mouse.
 
         This method can be called during a ButtonRelease event.  It
@@ -869,14 +886,14 @@ class RenderPane(EventHandler.EventHandler):
         if (self._CurrentActorFactory == None):
             return
 
-        event.actor = self._CurrentActor
-        event.picker = self._Picker
+        evt.actor = self._CurrentActor
+        evt.picker = self._Picker
 
-        self._CurrentActorFactory.HandleEvent(event)
+        self._CurrentActorFactory.HandleEvent(evt)
         self._CurrentActorFactory = None
         self._CurrentActor = None
 
-    def DoActorInteraction(self, event):
+    def DoActorInteraction(self, evt):
         """Forward mouse events to the current ActorFactory.
 
         This method can be called during Motion events to pass
@@ -894,13 +911,13 @@ class RenderPane(EventHandler.EventHandler):
         if (self._CurrentActorFactory == None):
             return
 
-        event.actor = self._CurrentActor
-        event.picker = self._Picker
+        evt.actor = self._CurrentActor
+        evt.picker = self._Picker
 
-        self._CurrentActorFactory.HandleEvent(event)
+        self._CurrentActorFactory.HandleEvent(evt)
 
     #--------------------------------------
-    def DoShowCursor(self, event):
+    def DoShowCursor(self, evt):
         """Internal method for hiding/showing the mouse pointer."""
         # show the cursor after hiding it
         if self._CursorOnFlag:
@@ -908,17 +925,17 @@ class RenderPane(EventHandler.EventHandler):
 
         self._CursorOnFlag = 1
 
-        if event.type in ('4', '5', '6', '7', '8'):  # mouse event
-            if not self._Renderer.IsInViewport(event.x, event.y):
+        if evt.type in ('4', '5', '6', '7', '8'):  # mouse event
+            if not self._Renderer.IsInViewport(evt.x, evt.y):
                 return
             for widget in self._Widgets:
-                if widget.IsInWidget(event):
+                if widget.IsInWidget(evt):
                     return
 
         self._ShowCursor()
-        self.DoCursorMotion(event)
+        self.DoCursorMotion(evt)
 
-    def DoHideCursor(self, event):
+    def DoHideCursor(self, evt):
         """Internal method for hiding/showing the mouse pointer."""
         # temporarily hide the cursor
         if not self._CursorOnFlag:
@@ -929,12 +946,12 @@ class RenderPane(EventHandler.EventHandler):
         self._HideCursor()
         self.Modified()
 
-    def DoCursorMotion(self, event):
+    def DoCursorMotion(self, evt):
         """Internal method for moving the 3D cursor when the mouse moves."""
         # handle cursor motion, internal use only
         # do the pick
         return
-        self.DoSmartPick(event)
+        self.DoSmartPick(evt)
 
         if self._PickInformationList:
             pickInfo = self._PickInformationList[0]
@@ -952,11 +969,11 @@ class RenderPane(EventHandler.EventHandler):
             z = self._Renderer.GetDisplayPoint()[2]
 
             # find world-coord from mouse position
-            self._Renderer.SetDisplayPoint(event.x, event.y, z)
+            self._Renderer.SetDisplayPoint(evt.x, evt.y, z)
             self._Renderer.DisplayToWorld()
             x0, y0, z0, w = self._Renderer.GetWorldPoint()
 
-            position = (x0 / w, y0 / w, z0 / w)
+            position = (old_div(x0, w), old_div(y0, w), old_div(z0, w))
             normal = camera.GetViewPlaneNormal()
             vector = camera.GetViewUp()
 
@@ -1001,7 +1018,7 @@ class RenderPane(EventHandler.EventHandler):
             cursor.SetVisibility(self._Renderer, 0)
 
     #--------------------------------------
-    def DoSmartPick(self, event):
+    def DoSmartPick(self, evt):
         """Internal method to do a pick at the event x,y coordinates.
 
         Perform a pick in order to convert the x,y display coords
@@ -1013,15 +1030,15 @@ class RenderPane(EventHandler.EventHandler):
 
         """
 
-        event.picker = self._Picker
+        evt.picker = self._Picker
 
-        self._Picker.Pick(event.x, event.y, 0, self._Renderer)
-        cameraPosition = event.renderer.GetActiveCamera().GetPosition()
+        self._Picker.Pick(evt.x, evt.y, 0, self._Renderer)
+        cameraPosition = evt.renderer.GetActiveCamera().GetPosition()
         pickInfoList = []
 
         # query all factories for positions and normals
         for factory in self._ActorFactories:
-            for pickInfo in factory.GetPickList(event):
+            for pickInfo in factory.GetPickList(evt):
                 position = pickInfo.position
                 pickInfo.distance = \
                     math.sqrt(((position[0] - cameraPosition[0]) ** 2) +
@@ -1031,14 +1048,14 @@ class RenderPane(EventHandler.EventHandler):
                 pickInfoList.append(pickInfo)
 
         # sort the list
-        pickInfoList.sort(
-            lambda pn1, pn2: 2 * (pn1.distance > pn2.distance) - 1)
+        pickInfoList.sort(key = lambda pn1: pn1.distance)
+        # old lambda function -- lambda pn1, pn2: 2 * (pn1.distance > pn2.distance) - 1)
         self._PickInformationList = pickInfoList
 
         return pickInfoList
 
     #--------------------------------------
-    def DoStartMotion(self, event):
+    def DoStartMotion(self, evt):
         """Generic handler for ButtonPress events.
 
         This handler just saves the initial mouse position in
@@ -1046,12 +1063,12 @@ class RenderPane(EventHandler.EventHandler):
         the _LastX,_LastY variables.
 
         """
-        self._LastX = event.x
-        self._LastY = event.y
-        self._StartX = event.x
-        self._StartY = event.y
+        self._LastX = evt.x
+        self._LastY = evt.y
+        self._StartX = evt.x
+        self._StartY = evt.y
 
-    def DoEndMotion(self, event):
+    def DoEndMotion(self, evt):
         """Generic handler for ButtonRelease events.
 
         This handler does nothing.
@@ -1059,16 +1076,16 @@ class RenderPane(EventHandler.EventHandler):
         """
         pass
 
-    def DoCameraRotate(self, event):
+    def DoCameraRotate(self, evt):
         """Mouse Motion handler for rotating the scene."""
-        x = event.x
-        y = event.y
+        x = evt.x
+        y = evt.y
 
         width, height = self._Renderer.GetSize()[:2]
         x0, y0 = self._Renderer.GetOrigin()
 
         camera = self._Renderer.GetActiveCamera()
-        if self._StartY - y0 < height / 8:
+        if self._StartY - y0 < old_div(height, 8):
             camera.Roll(x - self._LastX)
         else:
             camera.Azimuth(self._LastX - x)
@@ -1081,10 +1098,10 @@ class RenderPane(EventHandler.EventHandler):
         self._Renderer.ResetCameraClippingRange()
         self.Modified()  # JDG
 
-    def DoCameraPan(self, event):
+    def DoCameraPan(self, evt):
         """Mouse Motion handler for panning the scene."""
-        x = event.x
-        y = event.y
+        x = evt.x
+        y = evt.y
 
         renderer = self._Renderer
         camera = self._Renderer.GetActiveCamera()
@@ -1132,9 +1149,9 @@ class RenderPane(EventHandler.EventHandler):
 
             (rPoint0, rPoint1, rPoint2, rPoint3) = renderer.GetWorldPoint()
             if (rPoint3 != 0.0):
-                rPoint0 = rPoint0 / rPoint3
-                rPoint1 = rPoint1 / rPoint3
-                rPoint2 = rPoint2 / rPoint3
+                rPoint0 = old_div(rPoint0, rPoint3)
+                rPoint1 = old_div(rPoint1, rPoint3)
+                rPoint2 = old_div(rPoint2, rPoint3)
 
             camera.SetFocalPoint((fPoint0 - rPoint0) + fPoint0,
                                  (fPoint1 - rPoint1) + fPoint1,
@@ -1148,10 +1165,10 @@ class RenderPane(EventHandler.EventHandler):
         self._LastY = y
         self.Modified()  # JDG
 
-    def DoCameraZoom(self, event):
+    def DoCameraZoom(self, evt):
         """Mouse motion handler for zooming the scene."""
-        x = event.x
-        y = event.y
+        x = evt.x
+        y = evt.y
 
         renderer = self._Renderer
         camera = self._Renderer.GetActiveCamera()
@@ -1160,7 +1177,7 @@ class RenderPane(EventHandler.EventHandler):
             1.02, (0.5 * (y - self._LastY + x - self._LastX)))
 
         if camera.GetParallelProjection():
-            parallelScale = camera.GetParallelScale() / zoomFactor
+            parallelScale = old_div(camera.GetParallelScale(), zoomFactor)
             camera.SetParallelScale(parallelScale)
         else:
             camera.Dolly(zoomFactor)
@@ -1244,7 +1261,7 @@ class RenderPane(EventHandler.EventHandler):
     def DisconnectActorFactory(self, actorFactory):
         """Disconnect an ActorFactory from this RenderPane."""
         if actorFactory is None:
-            logging.error("actorFactory is None - ignoring")
+            logger.error("actorFactory is None - ignoring")
             return
         actorFactory.RemoveFromRenderer(self._Renderer)
         if actorFactory in self._ActorFactories:
@@ -1269,6 +1286,9 @@ class RenderPane(EventHandler.EventHandler):
         """Update the timestamp."""
         self._MTime.Modified()
 
+    def onCameraModified(self, obj, evt):
+        self.Modified()
+
     def HasChangedSince(self, sinceMTime):
         """Determine whether this object has changed since *sinceMTime* .
 
@@ -1278,8 +1298,13 @@ class RenderPane(EventHandler.EventHandler):
         """
         if self._MTime.GetMTime() > sinceMTime:
             return 1
-        if self._Renderer.GetMTime() > sinceMTime:
-            return 1
+# stub out next set of lines:  it appears that using a cell picker to find where
+# current mouse pointer is will cause renderer mtime to update - this means that
+# rendering occurs every time the mouse moves regardless of whether this is needed
+# or not.
+#        if self._Renderer.GetMTime() > sinceMTime:
+#            print 'renderer changed'
+#            return 1
         for factory in self._ActorFactories:
             if factory.HasChangedSince(sinceMTime):
                 return 1
@@ -1290,8 +1315,8 @@ class RenderPane(EventHandler.EventHandler):
 
     def GetRenderTime(self):
         """Get the MTime for the last render."""
-        return self._Renderer.GetMTime()  # JDG
-        # return self._RenderTime.GetMTime()
+        #return self._Renderer.GetMTime()  # JDG
+        return self._RenderTime.GetMTime()
 
     #--------------------------------------
     def StartRender(self):
@@ -1308,8 +1333,16 @@ class RenderPane(EventHandler.EventHandler):
         if light is None:
             light = vtk.vtkLight()
             self._Renderer.AddLight(light)
+            # TODO (JDG): should we use 'PositionalOn()' rather than move light around here?
+            #light.PositionalOn()
+            #light.SetConeAngle(180)
         light.SetPosition(camera.GetPosition())
         light.SetFocalPoint(camera.GetFocalPoint())
+
+    #--------------------------------------
+    def EndRender(self, obj, evt):
+        """This method keeps first at end of renderpane rendering"""
+        self._RenderTime.Modified()
 
     #--------------------------------------
     def ResetView(self):
@@ -1401,9 +1434,9 @@ class RenderPane(EventHandler.EventHandler):
         norm = math.sqrt(n_x * n_x + n_y * n_y + n_z * n_z)
 
         if (norm != 0):
-            n_x = n_x / norm
-            n_y = n_y / norm
-            n_z = n_z / norm
+            n_x = old_div(n_x, norm)
+            n_y = old_div(n_y, norm)
+            n_z = old_div(n_z, norm)
         else:
             n_x = 1.0
             n_y = 0.0
@@ -1420,23 +1453,23 @@ class RenderPane(EventHandler.EventHandler):
 
         # calculate the third vector from the first two
         if (norm != 0):
-            o_x = o_x / norm
-            o_y = o_y / norm
-            o_z = o_z / norm
+            o_x = old_div(o_x, norm)
+            o_y = old_div(o_y, norm)
+            o_z = old_div(o_z, norm)
 
         # if we don't have a valid vector
         elif (n_x * n_x > n_y * n_y and n_x * n_x > n_z * n_z):
-            o_x = n_z / math.sqrt(n_x * n_x + n_z * n_z)
+            o_x = old_div(n_z, math.sqrt(n_x * n_x + n_z * n_z))
             o_y = 0
-            o_z = -n_x / math.sqrt(n_x * n_x + n_z * n_z)
+            o_z = old_div(-n_x, math.sqrt(n_x * n_x + n_z * n_z))
         elif (n_y * n_y > n_z * n_z):
-            o_y = n_x / math.sqrt(n_y * n_y + n_x * n_x)
+            o_y = old_div(n_x, math.sqrt(n_y * n_y + n_x * n_x))
             o_z = 0
-            o_x = -n_y / math.sqrt(n_y * n_y + n_x * n_x)
+            o_x = old_div(-n_y, math.sqrt(n_y * n_y + n_x * n_x))
         else:
-            o_z = n_y / math.sqrt(n_z * n_z + n_y * n_y)
+            o_z = old_div(n_y, math.sqrt(n_z * n_z + n_y * n_y))
             o_x = 0
-            o_y = -n_z / math.sqrt(n_z * n_z + n_y * n_y)
+            o_y = old_div(-n_z, math.sqrt(n_z * n_z + n_y * n_y))
 
         # use cross product
         p_x = n_y * o_z - n_z * o_y

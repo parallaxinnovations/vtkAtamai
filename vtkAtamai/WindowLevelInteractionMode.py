@@ -1,3 +1,5 @@
+from __future__ import division
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -36,6 +38,7 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from past.utils import old_div
 __rcs_info__ = {
     #
     #  Creation Information
@@ -92,7 +95,7 @@ Note:  When you call SetLookupTable(), the DataRange is automatically
 """
 
 #======================================
-import InteractionMode
+from . import InteractionMode
 
 #======================================
 
@@ -130,7 +133,7 @@ class WindowLevelInteractionMode(InteractionMode.InteractionMode):
         mlo, mhi = self._DataRange
         lo, hi = table.GetTableRange()
 
-        level = (lo + hi) / 2.0
+        level = old_div((lo + hi), 2.0)
         window = hi - lo
 
         level = level + (event.x - self._LastX) * (mhi - mlo) / 500.0
@@ -139,8 +142,8 @@ class WindowLevelInteractionMode(InteractionMode.InteractionMode):
         if window <= 0:
             window = 1e-3
 
-        lo = level - window / 2.0
-        hi = level + window / 2.0
+        lo = level - old_div(window, 2.0)
+        hi = level + old_div(window, 2.0)
 
         table.SetTableRange(lo, hi)
         table.Modified()

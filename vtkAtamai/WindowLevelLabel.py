@@ -1,3 +1,4 @@
+from __future__ import division
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -36,6 +37,7 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from past.utils import old_div
 __rcs_info__ = {
     #
     #  Creation Information
@@ -126,7 +128,7 @@ class WindowLevelLabel(Label.Label):
         min, max = self._Table.GetTableRange()
 
         self._Window = max - min
-        self._Level = (max + min) / 2.0
+        self._Level = old_div((max + min), 2.0)
 
         # create a formatted string, and set the label
         text = "W %#4g L %#4g" % (self._Window * self._Scale,

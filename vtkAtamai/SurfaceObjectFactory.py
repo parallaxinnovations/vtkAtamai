@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -125,9 +126,10 @@ Public Methods:
 """
 
 #======================================
-from ActorFactory import *
+from .ActorFactory import *
 import logging
 
+logger = logging.getLogger(__name__)
 #======================================
 
 
@@ -298,7 +300,7 @@ class SurfaceObjectFactory(ActorFactory):
 
         # accommodate for surface data without a producer
         if alg is None and surface is not None:
-            logging.warning(
+            logger.warning(
                 "SurfaceObjectFactory SetInput() method has been called!")
             tp = vtk.vtkTrivialProducer()
             tp.SetOutput(surface)

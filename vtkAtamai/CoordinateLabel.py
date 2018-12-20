@@ -101,7 +101,7 @@ class CoordinateLabel(Label):
         kw["font"] = "courier"
         kw["text"] = "  0.00R   0.00A   0.00S"
 
-        apply(Label.__init__, (self, parent), kw)
+        Label.__init__(*(self, parent), **kw)
 
         self._Cursor = None
 

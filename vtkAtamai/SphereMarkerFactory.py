@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -36,6 +37,7 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from builtins import range
 __rcs_info__ = {
     #
     #  Creation Information
@@ -84,7 +86,7 @@ Public Methods:
 
 """
 
-from ActorFactory import *
+from .ActorFactory import *
 from math import *
 
 
@@ -92,38 +94,28 @@ class SphereMarkerFactory(ActorFactory):
 
     def __init__(self):
         ActorFactory.__init__(self)
-
+        self.__default_size = 5.0
         self._property = vtk.vtkProperty()
-        self._sphereSource = vtk.vtkSphereSource()
-        self._sphereSource.SetRadius(5)
         self._markPoints = vtk.vtkPoints()
         self._polyData = vtk.vtkPolyData()
         self._polyData.SetPoints(self._markPoints)
-        self._glyph = vtk.vtkGlyph3D()
-        self._glyph.SetInput(self._polyData)
-        self._glyph.SetSource(self._sphereSource.GetOutput())
+
+    def GetNearestPoint(self, point):
+        """This is an uncommon action - don't bother trying to maintain structures to speed things up"""
+        locator = vtk.vtkPointLocator()
+        locator.SetDataSet(self._polyData)
+        _id = locator.FindClosestPoint(point)
+        return _id
+
+    def SetDefaultSize(self, size):
+        self.__default_size = size
+
+    def GetDefaultSize(self):
+        return self.__default_size
 
     def AddPoint(self, point):
         self._markPoints.InsertNextPoint(point[0], point[1], point[2])
-
-        # change the actor scale to suit the renderer
-        x = point[0]
-        y = point[1]
-        z = point[2]
-        for ren in self._Renderers:
-            camera = ren.GetActiveCamera()
-            if camera.GetParallelProjection():
-                worldsize = camera.GetParallelScale()
-            else:
-                cx, cy, cz = camera.GetPosition()
-                worldsize = sqrt((x - cx) ** 2 + (y - cy) ** 2 + (z - cz) ** 2) * \
-                    tan(0.5 * camera.GetViewAngle() / 57.296)
-            pitch = worldsize / sqrt(ren.GetSize()[0] * ren.GetSize()[1])
-            # print pitch
-            self.SetSize(10 * pitch)
-
         self._markPoints.Modified()
-        self.Render()
 
     def RemovePoint(self, id):
         # Remove the point from list at id
@@ -134,6 +126,9 @@ class SphereMarkerFactory(ActorFactory):
             self._markPoints.SetNumberOfPoints(n - 1)
         self._markPoints.Modified()
 
+    def GetPoints(self):
+        return self._markPoints
+
     def RemoveLastPoint(self):
         self._markPoints.SetNumberOfPoints(
             self._markPoints.GetNumberOfPoints() - 1)
@@ -141,17 +136,27 @@ class SphereMarkerFactory(ActorFactory):
 
     def RemoveAllPoints(self):
         self._markPoints.SetNumberOfPoints(0)
+        self._markPoints.Modified()
 
-    def SetSize(self, size):
-        self._sphereSource.SetRadius(0.5 * size)
-        self._sphereSource.Update()
-        # self._sphere.SetResolution(10)
+    def SetVisibility(self, renderer, visibility):
+        for actor in self._ActorDict[renderer]:
+            actor.SetVisibility(visibility)
+
+    def GetScaleFactor(self, renderer):
+        actor = self._ActorDict[renderer][0]
+        glyph = actor.GetMapper().GetInputConnection(0,0).GetProducer()
+        return glyph.GetScaleFactor()
+
+    def SetScaleFactor(self, renderer, scale):
+        for actor in self._ActorDict[renderer]:
+            glyph = actor.GetMapper().GetInputConnection(0,0).GetProducer()
+            glyph.SetScaleFactor(scale)
 
     def SetOpacity(self, theOpacity):
         self._property.SetOpacity(theOpacity)
 
     def SetColor(self, *args):
-        apply(self._property.SetColor, args)
+        self._property.SetColor(*args)
 
     def GetColor(self):
         return self._property.GetColor()
@@ -159,12 +164,36 @@ class SphereMarkerFactory(ActorFactory):
     def GetActor(self):
         return self._Actor
 
+    def PickableOff(self):
+        for ren in self._Renderers:
+            actor = self._ActorDict[ren][0]
+            actor.PickableOff()
+
+    def PickableOn(self):
+        for ren in self._Renderers:
+            actor = self._ActorDict[ren][0]
+            actor.PickableOn()
+
     def _MakeActors(self):
         actor = self._NewActor()
         actor.SetProperty(self._property)
         actor.PickableOff()
 
-        self._mapper = vtk.vtkPolyDataMapper()
-        self._mapper.SetInputConnection(self._glyph.GetOutputPort())
-        actor.SetMapper(self._mapper)
+        sphereSource = vtk.vtkSphereSource()
+        sphereSource.SetRadius(self.__default_size)
+
+        glyph = vtk.vtkGlyph3D()
+
+        # VTK-6
+        if vtk.vtkVersion().GetVTKMajorVersion() > 5:
+            glyph.SetInputData(self._polyData)
+        else:
+            glyph.SetInput(self._polyData)
+
+        glyph.SetSourceConnection(sphereSource.GetOutputPort())
+
+        mapper = vtk.vtkPolyDataMapper()
+        mapper.SetInputConnection(glyph.GetOutputPort())
+        actor.SetMapper(mapper)
+
         return [actor]

@@ -110,7 +110,7 @@ class IntensityLabel(Label):
         kw["font"] = "courier"
         kw["text"] = "0.000"
 
-        apply(Label.__init__, (self, parent), kw)
+        Label.__init__(*(self, parent), **kw)
 
         self._Cursor = None
 

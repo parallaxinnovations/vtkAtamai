@@ -1,3 +1,5 @@
+from __future__ import division
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -36,6 +38,8 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from builtins import range
+from past.utils import old_div
 __rcs_info__ = {
     #
     #  Creation Information
@@ -86,7 +90,7 @@ Public Methods:
 """
 
 #======================================
-from ActorFactory import *
+from .ActorFactory import *
 import math
 
 
@@ -106,7 +110,7 @@ class PlaneIntersectionsFactory(ActorFactory):
         self._Append = vtk.vtkAppendPolyData()
 
     def SetColor(self, *args):
-        apply(self._Property.SetColor, args)
+        self._Property.SetColor(*args)
 
     def GetColor(self):
         return self._Property.GetColor()
@@ -166,7 +170,7 @@ class PlaneIntersectionsFactory(ActorFactory):
         v = camera.GetViewPlaneNormal()
 
         if camera.GetParallelProjection():
-            d = camera.GetParallelScale() / 100
+            d = old_div(camera.GetParallelScale(), 100)
         else:
             d = camera.GetDistance() * \
                 math.sin(camera.GetViewAngle() / 360.0 * math.pi) / \

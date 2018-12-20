@@ -1,7 +1,7 @@
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
-# Copyright (c) 2011-2015 Parallax Innovations Inc.
+# Copyright (c) 2011-2018 Parallax Innovations Inc.
 #
 # Use, modification and redistribution of the software, in source or
 # binary forms, are permitted provided that the following terms and
@@ -53,12 +53,19 @@ Derived From:
   RenderPane, wxWindow
 
 """
+from __future__ import absolute_import
 
 #======================================
+from builtins import chr
+
+# we can't use lib2to3 on str() and hex() under Linux with py2.7 it seems
+#from builtins import str
+#from builtins import hex
+from builtins import map
 import wx
 import vtk
-import PaneFrame
-from EventHandler import Event
+from . import PaneFrame
+from .EventHandler import Event
 baseClass = wx.Window
 
 # a few configuration items, see what works best on your system
@@ -192,8 +199,9 @@ class wxPaneFrame(PaneFrame.PaneFrame, baseClass):
 
         wx.WXK_PAUSE: "Pause",
         wx.WXK_CAPITAL: "Caps_Lock",
-        wx.WXK_PRIOR: "Prior",
-        wx.WXK_NEXT: "Next",
+        # Phoenix deprecates certain keys
+        ## wx.WXK_PRIOR: "Prior",
+        ## wx.WXK_NEXT: "Next",
         wx.WXK_END: "End",
         wx.WXK_HOME: "Home",
         wx.WXK_LEFT: "Left",
@@ -346,7 +354,7 @@ class wxPaneFrame(PaneFrame.PaneFrame, baseClass):
         if 'size' in kw:
             size = kw['size']
             if not isinstance(size, wx.Size):
-                size = apply(wx.Size, size)
+                size = wx.Size(*size)
             del kw['size']
 
         if 'width' in kw and 'height' in kw:
@@ -434,10 +442,10 @@ class wxPaneFrame(PaneFrame.PaneFrame, baseClass):
         self._Inside = 0
 
         # refresh window by doing a Render
-        wx.EVT_PAINT(self, self.OnPaint)
+        self.Bind(wx.EVT_PAINT, self.OnPaint)
 
         # turn off background erase to reduce flicker
-        wx.EVT_ERASE_BACKGROUND(self, lambda e: None)
+        self.Bind(wx.EVT_ERASE_BACKGROUND, lambda e: None)
 
         # Bind the events to the event converters
         self.Bind(wx.EVT_RIGHT_DOWN, self.OnButtonDown)
@@ -500,7 +508,12 @@ class wxPaneFrame(PaneFrame.PaneFrame, baseClass):
         changed.
         """
         cur = self._cursor_map[obj.GetCurrentCursor()]
-        c = wx.StockCursor(cur)
+
+        if 'phoenix' in wx.version():
+            c = wx.Cursor(cur)
+        else:
+            c = wx.StockCursor(cur)
+
         self.SetCursor(c)
 
     def CursorChangedEvent(self, obj, evt):
@@ -513,14 +526,24 @@ class wxPaneFrame(PaneFrame.PaneFrame, baseClass):
 
     def HideCursor(self):
         """Hides the cursor."""
-        c = wx.StockCursor(wx.CURSOR_BLANK)
+
+        if 'phoenix' in wx.version():
+            c = wx.Cursor(wx.CURSOR_BLANK)
+        else:
+            c = wx.StockCursor(wx.CURSOR_BLANK)
+
         self.SetCursor(c)
 
     def ShowCursor(self):
         """Shows the cursor."""
         rw = self._RenderWindowInteractor.GetRenderWindow()
         cur = self._cursor_map[rw.GetCurrentCursor()]
-        c = wx.StockCursor(cur)
+
+        if 'phoenix' in wx.version():
+            c = wx.Cursor(cur)
+        else:
+            c = wx.StockCursor(cur)
+
         self.SetCursor(c)
 
     def OnSize(self, event):
@@ -545,9 +568,9 @@ class wxPaneFrame(PaneFrame.PaneFrame, baseClass):
 
     def cancelTimers(self):
         # make sure timers get cancelled
-        if self._QualityRenderId != -1:
+        if self._QualityRenderId is not None:
             self._QualityRenderId.Destroy()
-            self._QualityRenderId = -1
+            self._QualityRenderId = None
 
     def OnButtonDClick(self, event):
 
@@ -678,6 +701,7 @@ class wxPaneFrame(PaneFrame.PaneFrame, baseClass):
         # event processing should continue
         # we call this early in case any of the VTK code raises an
         # exception.
+
         event.Skip()
 
         self._RenderWindowInteractor.SetEventInformationFlipY(
@@ -818,7 +842,7 @@ class wxPaneFrame(PaneFrame.PaneFrame, baseClass):
         try:
             d = wx.GetXDisplay()
 
-        except NameError:
+        except (AttributeError, NameError):
             # wx.GetXDisplay was added by Robin Dunn in wxPython 2.6.0.1
             # if it's not available, we can't pass it.  In general,
             # things will still work; on some setups, it'll break.
@@ -832,9 +856,15 @@ class wxPaneFrame(PaneFrame.PaneFrame, baseClass):
                 if not d.startswith('0x'):
                     d = '0x' + d
 
-                # we now have 0xdeadbeef
-                # VTK wants it as: _deadbeef_void_p (pre-SWIG-1.3 style)
-                d = '_%s_%s\0' % (d[2:], 'void_p')
+                # the vtk pointer format changed between 6.1 and 6.2
+                ver = list(map(int, vtk.vtkVersion().GetVTKVersion().split('.')))
+                ver = ver[0] * 10000 + ver[1] * 100 + ver[2]
+
+                if ver < 60200:
+                    d = '_%s_%s\0' % (d[2:], 'void_p')
+                else:
+                    # VTK wants it as: _xxxxxxxx_p_void (SWIG pointer)
+                    d = '_%s_%s\0' % (d[2:], 'p_void')
 
         return d
 
@@ -889,7 +919,7 @@ class wxPaneFrame(PaneFrame.PaneFrame, baseClass):
 
         # make sure the RenderWindow is sized correctly
         self._RenderWindowInteractor.GetRenderWindow().SetSize(
-            self.GetSizeTuple())
+            self.GetSize())
 
         # JDG: make sure all windows are modified
         for pane in self._RenderPanes:

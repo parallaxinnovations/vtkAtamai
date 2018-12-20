@@ -1,3 +1,5 @@
+from __future__ import division
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -36,6 +38,7 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from past.utils import old_div
 __rcs_info__ = {
     #
     #  Creation Information
@@ -81,7 +84,7 @@ Public Methods:
 
 """
 
-from ActorFactory import *
+from .ActorFactory import *
 import math
 
 
@@ -133,12 +136,12 @@ class SphereMarkFactory(ActorFactory):
     def GetOpacity(self):
         return self.__property.GetOpacity()
 
-    def SetVisibility(self, renderer, yesno):
+    def SetVisibility(self, renderer, visibility):
         for actor in self._ActorDict[renderer]:
-            actor.SetVisibility(yesno)
+            actor.SetVisibility(visibility)
 
     def SetColor(self, *args):
-        apply(self.__property.SetColor, args)
+        self.__property.SetColor(*args)
 
     def GetColor(self):
         return self.__property.GetColor()
@@ -183,8 +186,11 @@ class SphereMarkFactory(ActorFactory):
                     math.tan(0.5 * camera.GetViewAngle() / 57.296)
             windowWidth, windowHeight = renderer.GetSize()
             if windowWidth > 0 and windowHeight > 0:
-                pitch = worldsize / windowHeight
+                pitch = old_div(worldsize, windowHeight)
                 for actor in actors:
                     # ignore resize of caption
                     if not actor.IsA('vtkCaptionActor2D'):
-                        actor.SetScale(pitch)
+                        old_pitch = actor.GetScale()[0]
+                        ratio = old_div(pitch, float(old_pitch))
+                        if ratio > 1.5 or ratio < 0.66:
+                            actor.SetScale(pitch)

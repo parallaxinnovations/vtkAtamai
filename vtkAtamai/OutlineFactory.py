@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -85,7 +86,7 @@ PublicMethods:
 
 """
 #======================================
-import ActorFactory
+from . import ActorFactory
 import math
 import vtk
 
@@ -95,23 +96,18 @@ import vtk
 class OutlineFactory(ActorFactory.ActorFactory):
 
     def __init__(self):
-
+        self.count = 0
         ActorFactory.ActorFactory.__init__(self)
         self._OutlineFilter = vtk.vtkOutlineFilter()
         self._Property = vtk.vtkProperty()
-        self._Input = None
 
-    def SetInputData(self, input):
-        self._Input = input
-        # VTK-6
-        if vtk.vtkVersion().GetVTKMajorVersion() > 5:
-            self._OutlineFilter.SetInputData(input)
-        else:
-            self._OutlineFilter.SetInput(input)
+    def SetInputConnection(self, algorithm_output):
+        self._OutlineFilter.SetInputConnection(algorithm_output)
+        self._OutlineFilter.UpdateWholeExtent()  # this is important!!!
         self.Modified()
 
-    def GetInput(self):
-        return self._Input
+    def GetInputConnection(self):
+        return self._OutlineFilter.GetInputConnection(0, 0)
 
     def SetColor(self, *args):
 
@@ -138,28 +134,12 @@ class OutlineFactory(ActorFactory.ActorFactory):
 
         if (ActorFactory.ActorFactory.HasChangedSince(self, sinceMTime)):
             return 1
-        if (self._Input and self._Input.GetMTime() > sinceMTime):
+
+        image = self._OutlineFilter.GetInputDataObject(0,0)
+        if (image and image.GetMTime() > sinceMTime):
             return 1
+
         return 0
-
-#    def AddToRenderer(self, ren):
-#        ActorFactory.ActorFactory.AddToRenderer(self, ren)
-#        ren.AddObserver('StartEvent', self.OnRenderEvent)
-
-#    def OnRenderEvent(self, ren, event):
-#
-#        camera = ren.GetActiveCamera()
-#        v = camera.GetViewPlaneNormal()
-#
-#        if camera.GetParallelProjection():
-#            d = camera.GetParallelScale()/100.0
-#        else:
-#            d = camera.GetDistance() * \
-#                math.sin(camera.GetViewAngle()/360.0*math.pi) / \
-#                100.0
-#        for actor in self._ActorDict[ren]:
-#            actor.SetPosition(self._Transform.GetInverse().TransformVector(
-#                v[0]*d, v[1]*d, v[2]*d))
 
     def _MakeActors(self):
         actor = self._NewActor()

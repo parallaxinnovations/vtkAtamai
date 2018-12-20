@@ -36,6 +36,7 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from builtins import object
 __rcs_info__ = {
     #
     #  Creation Information

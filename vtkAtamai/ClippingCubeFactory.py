@@ -1,3 +1,6 @@
+from __future__ import division
+from __future__ import print_function
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -36,6 +39,9 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from builtins import range
+from builtins import object
+from past.utils import old_div
 __rcs_info__ = {
     #
     #  Creation Information
@@ -97,7 +103,7 @@ Public Methods:
 """
 
 #======================================
-from ActorFactory import *
+from .ActorFactory import *
 import math
 import vtk
 
@@ -111,7 +117,7 @@ class ClippingCubeFacePlane(object):
         self.__ClippingCubeFactory = clippingCubeFactory
         self.__Vertices = vertices
         self.__PlaneIndex = planeIndex
-        axis = planeIndex / 2
+        axis = old_div(planeIndex, 2)
         self.__Axis = axis
         self.__Direction = 1 - 2 * (planeIndex - 2 * axis)
         self.__Permutation = {0: (0, 1, 2), 1: (1, 2, 0), 2: (2, 0, 1)}[axis]
@@ -188,7 +194,7 @@ class ClippingCubeFacePlane(object):
         oldCenter = 0
         for vertex in self.__FaceVertices:
             oldCenter = oldCenter + vertex[axis]
-        oldCenter = oldCenter / 4.0
+        oldCenter = old_div(oldCenter, 4.0)
 
         direction = 1 - 2 * (self.__PlaneIndex - 2 * axis)
         self.Push(direction * (center[axis] - oldCenter))
@@ -224,7 +230,7 @@ class ClippingCubeFacePlane(object):
 
         center = self.GetCenter()
 
-        print "SetNormal is still incomplete"
+        print("SetNormal is still incomplete")
 
     def GetNormal(self):
         return self.__ClippingCubeFactory.GetClippingPlane(self.__PlaneIndex)\
@@ -254,8 +260,8 @@ class ClippingCubeFacePlane(object):
         renderer.DisplayToWorld()
         lx2, ly2, lz2, w2 = renderer.GetWorldPoint()
 
-        return self.IntersectWithLine((lx1 / w1, ly1 / w1, lz1 / w1),
-                                      (lx2 / w2, ly2 / w2, lz2 / w2))
+        return self.IntersectWithLine((old_div(lx1, w1), old_div(ly1, w1), old_div(lz1, w1)),
+                                      (old_div(lx2, w2), old_div(ly2, w2), old_div(lz2, w2)))
 
     def IntersectWithLine(self, p1, p2):
         # return the intersection of the line with endpoints p1,p2 with plane
@@ -274,8 +280,8 @@ class ClippingCubeFacePlane(object):
 
         # divide-by-zero exception will be thrown in there is no intersection
 
-        t = (nx * (cx - p1[0]) + ny * (cy - p1[1]) + nz * (cz - p1[2])) /   \
-            dotprod
+        t = old_div((nx * (cx - p1[0]) + ny * (cy - p1[1]) + nz * (cz - p1[2])),   \
+            dotprod)
 
         return (p1[0] + t * lx, p1[1] + t * ly, p1[2] + t * lz)
 
@@ -383,7 +389,7 @@ class ClippingCubeFactory(ActorFactory):
         self.Modified()
 
     def DoPush(self, event):
-        if (self._Plane == None):
+        if self._Plane is None:
             return
 
         renderer = event.renderer
@@ -404,7 +410,7 @@ class ClippingCubeFactory(ActorFactory):
         renderer.SetDisplayPoint(event.x, event.y, z)
         renderer.DisplayToWorld()
         wx, wy, wz, w = renderer.GetWorldPoint()
-        wx, wy, wz = (wx / w, wy / w, wz / w)
+        wx, wy, wz = (old_div(wx, w), old_div(wy, w), old_div(wz, w))
 
         # mouse motion vector, in world coords
         dx, dy, dz = (wx - lx, wy - ly, wz - lz)
@@ -416,8 +422,8 @@ class ClippingCubeFactory(ActorFactory):
 
         if (abs(n_dot_v) < 0.9):
             # drag plane to exactly match cursor motion
-            dd = (dx * (nx - vx * n_dot_v) + dy * (ny - vy * n_dot_v) + dz * (nz - vz * n_dot_v)) / \
-                 (1.0 - n_dot_v * n_dot_v)
+            dd = old_div((dx * (nx - vx * n_dot_v) + dy * (ny - vy * n_dot_v) + dz * (nz - vz * n_dot_v)), \
+                 (1.0 - n_dot_v * n_dot_v))
         else:
             # plane is perpendicular to viewing ray, so just push by distance
             dd = math.sqrt(dx * dx + dy * dy + dz * dz)
@@ -426,7 +432,7 @@ class ClippingCubeFactory(ActorFactory):
 
         # find the fraction of the push that was done, in case we hit bounds
         if (dd != 0):
-            f = self._Plane.Push(dd) / dd
+            f = old_div(self._Plane.Push(dd), dd)
         else:
             f = 1.0
 
@@ -558,18 +564,18 @@ class ClippingCubeFactory(ActorFactory):
         for i in range(6):
             indexTuple = self._PlaneVertexIndices[i]
             plane = self._PlaneSources[i]
-            apply(plane.SetOrigin, vertices[indexTuple[0]])
-            apply(plane.SetPoint1, vertices[indexTuple[1]])
-            apply(plane.SetPoint2, vertices[indexTuple[2]])
+            plane.SetOrigin(*vertices[indexTuple[0]])
+            plane.SetPoint1(*vertices[indexTuple[1]])
+            plane.SetPoint2(*vertices[indexTuple[2]])
         for i in range(12):
             indexTuple = self._LineVertexIndices[i]
             line = self._LineSources[i]
-            apply(line.SetPoint1, vertices[indexTuple[0]])
-            apply(line.SetPoint2, vertices[indexTuple[1]])
+            line.SetPoint1(*vertices[indexTuple[0]])
+            line.SetPoint2(*vertices[indexTuple[1]])
 
         # adjust plane equations appropriately
         if (planeIndex == -1):
-            indexList = range(6)
+            indexList = list(range(6))
         else:
             indexList = [planeIndex]
 

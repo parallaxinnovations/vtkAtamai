@@ -1,3 +1,5 @@
+from __future__ import division
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -35,6 +37,9 @@
 #
 # This file represents a derivative work by Parallax Innovations Inc.
 #
+from builtins import map
+from builtins import range
+from past.utils import old_div
 __rcs_info__ = {
     #
     #  Creation Information
@@ -134,9 +139,9 @@ Public Methods:
 """
 
 #======================================
-import ActorFactory
-import ClippingCubeFactory
-import PaneFrame
+from . import ActorFactory
+from . import ClippingCubeFactory
+from . import PaneFrame
 import math
 import vtk
 
@@ -369,7 +374,7 @@ class VolumePlanesFactory(ActorFactory.ActorFactory):
     # call when orientation changes
     def OnRenderEvent(self, renderer, vtkevent):
         VPN = renderer.GetActiveCamera().GetViewPlaneNormal()
-        absVPN = map(abs, VPN)
+        absVPN = list(map(abs, VPN))
         planeIndex = absVPN.index(max(absVPN))
         oldPlaneIndex = self._RendererCurrentIndex[renderer]
         if VPN[planeIndex] < 0:
@@ -475,7 +480,7 @@ class VolumePlanesFactory(ActorFactory.ActorFactory):
             cpos = renderer.GetActiveCamera().GetPosition()
             cnorm = (cpos[0] - pos[0], cpos[1] - pos[1], cpos[2] - pos[2])
             n = math.sqrt(cnorm[0] ** 2 + cnorm[1] ** 2 + cnorm[2] ** 2)
-            cnorm = (cnorm[0] / n, cnorm[1] / n, cnorm[2] / n)
+            cnorm = (old_div(cnorm[0], n), old_div(cnorm[1], n), old_div(cnorm[2], n))
 
             origins = []
             normals = []
@@ -505,7 +510,7 @@ class VolumePlanesFactory(ActorFactory.ActorFactory):
                         bplane.SetNormal(normalw[0], normalw[1], normalw[2])
                         bplane.SetOrigin(
                             transform.TransformPoint(p.GetCenter()))
-                        if apply(bplane.EvaluateFunction, cplane.GetOrigin()) < 0:
+                        if bplane.EvaluateFunction(*cplane.GetOrigin()) < 0:
                             cplane.SetOrigin(bplane.GetOrigin())
                         break
                 cplane = cplanes.GetNextItem()
@@ -517,7 +522,7 @@ class VolumePlanesFactory(ActorFactory.ActorFactory):
                         bplane.SetNormal(-normalw[0], -normalw[1], -normalw[2])
                         bplane.SetOrigin(
                             transform.TransformPoint(p.GetCenter()))
-                        if apply(bplane.EvaluateFunction, cplane.GetOrigin()) < 0:
+                        if bplane.EvaluateFunction(*cplane.GetOrigin()) < 0:
                             cplane.SetOrigin(bplane.GetOrigin())
                         break
 
@@ -558,11 +563,11 @@ class VolumePlanesFactory(ActorFactory.ActorFactory):
                         np = planes.GetNextItem()
                         bplane = bplanes.GetNextItem()
                         # an ugly hack to ensure exact rounding for comparison
-                        np.SetNormal(transform.TransformNormal(normals[j / 2]))
-                        if j / 2 != k and bplane.GetNormal() == np.GetNormal() and \
-                                apply(bplane.EvaluateFunction, origins[j / 2]) > 0:
-                            np.SetOrigin(origins[j / 2])
-                            np.SetNormal(normals[j / 2])
+                        np.SetNormal(transform.TransformNormal(normals[old_div(j, 2)]))
+                        if old_div(j, 2) != k and bplane.GetNormal() == np.GetNormal() and \
+                                bplane.EvaluateFunction(*origins[old_div(j, 2)]) > 0:
+                            np.SetOrigin(origins[old_div(j, 2)])
+                            np.SetNormal(normals[old_div(j, 2)])
                         else:
                             np.SetOrigin(transform.GetInverse().
                                          TransformPoint(bplane.GetOrigin()))
@@ -608,7 +613,7 @@ class VolumePlanesFactory(ActorFactory.ActorFactory):
     def SetInput(self, input):
         # the input is the image data to slice through
         input.UpdateInformation()
-        extent = input.GetWholeExtent()
+        extent = input.GetExtent()  # VTK 6
         origin = input.GetOrigin()
         spacing = input.GetSpacing()
         if self._VolumeBounds:
@@ -625,9 +630,9 @@ class VolumePlanesFactory(ActorFactory.ActorFactory):
                          0, self._VolumeResolution[1] - 1,
                          0, self._VolumeResolution[2] - 1]
 
-        resliceSpacing = ((bounds[1] - bounds[0]) / resliceExtent[1],
-                          (bounds[3] - bounds[2]) / resliceExtent[3],
-                          (bounds[5] - bounds[4]) / resliceExtent[5])
+        resliceSpacing = (old_div((bounds[1] - bounds[0]), resliceExtent[1]),
+                          old_div((bounds[3] - bounds[2]), resliceExtent[3]),
+                          old_div((bounds[5] - bounds[4]), resliceExtent[5]))
 
         resliceOrigin = (bounds[0] + 0.5 * resliceSpacing[0],
                          bounds[2] + 0.5 * resliceSpacing[1],
@@ -636,7 +641,7 @@ class VolumePlanesFactory(ActorFactory.ActorFactory):
         # first shrink the image & antialias
         shrink = [1.0, 1.0, 1.0]
         for i in range(3):
-            s = abs(resliceSpacing[i] / spacing[i])
+            s = abs(old_div(resliceSpacing[i], spacing[i]))
             if s > 1.0:
                 shrink[i] = s
 
@@ -674,10 +679,10 @@ class VolumePlanesFactory(ActorFactory.ActorFactory):
 
         # this is for if we want to warp the volume before renderering
         self._TransformToGrid.SetGridSpacing(
-            map(lambda x: 4 * x, resliceSpacing))
+            [4 * x for x in resliceSpacing])
         self._TransformToGrid.SetGridOrigin(resliceOrigin)
         self._TransformToGrid.SetGridExtent(
-            map(lambda x: x / 4, resliceExtent))
+            [old_div(x, 4) for x in resliceExtent])
 
         # set opacity according to slice spacing (is this correct?)
         self._PropertyXY.SetOpacity(
@@ -784,7 +789,7 @@ class VolumePlanesFactory(ActorFactory.ActorFactory):
         return self._VolumeBounds
 
     def SetVolumeExtent(self, *r):
-        apply(self.SetVolumeResolution, r)
+        self.SetVolumeResolution(*r)
 
     def SetVolumeResolution(self, *r):
         if len(r) == 1:
@@ -901,18 +906,18 @@ class VolumePlanesFactory(ActorFactory.ActorFactory):
                 # cast a ray into the volume from one side
 
                 # get mininum voxel spacing
-                spacing = min(map(abs, self._Input.GetSpacing()))
+                spacing = min(list(map(abs, self._Input.GetSpacing())))
 
                 # get the number of steps required along the length
-                N = int(math.ceil(abs(pathlength / spacing)))
-                dx, dy, dz = (vec[0] / N, vec[1] / N, vec[2] / N)
+                N = int(math.ceil(abs(old_div(pathlength, spacing))))
+                dx, dy, dz = (old_div(vec[0], N), old_div(vec[1], N), old_div(vec[2], N))
                 x0, y0, z0 = point1
                 for i in range(N):
                     x = x0 + i * dx
                     y = y0 + i * dy
                     z = z0 + i * dz
                     value = vol.FunctionValue(
-                        x + dx / 2, y + dy / 2, z + dz / 2)
+                        x + old_div(dx, 2), y + old_div(dy, 2), z + old_div(dz, 2))
                     idx = int(round((value - range[
                               0]) / (range[1] - range[0]) * maxidx))
                     if idx < 0:
@@ -940,7 +945,7 @@ class VolumePlanesFactory(ActorFactory.ActorFactory):
                         y = y1 - i * dy
                         z = z1 - i * dz
                         value = vol.FunctionValue(
-                            x - dx / 2, y - dy / 2, z - dz / 2)
+                            x - old_div(dx, 2), y - old_div(dy, 2), z - old_div(dz, 2))
                         idx = int(round((value - range[
                                   0]) / (range[1] - range[0]) * maxidx))
                         if idx < 0:
@@ -978,7 +983,7 @@ class VolumePlanesFactory(ActorFactory.ActorFactory):
                   origin[2] + spacing[2] * (extent[4] - 0.5),
                   origin[2] + spacing[2] * (extent[5] + 0.5)]
 
-        for sliceNumber in range(extent[4], (extent[5] + 1) / reduce):
+        for sliceNumber in range(extent[4], old_div((extent[5] + 1), reduce)):
             # the z position of the slice
             z = origin[2] + reduce * sliceNumber * spacing[2]
 
@@ -1034,7 +1039,7 @@ class VolumePlanesFactory(ActorFactory.ActorFactory):
                   origin[2] + spacing[2] * (extent[4] - 0.5),
                   origin[2] + spacing[2] * (extent[5] + 0.5)]
 
-        for sliceNumber in range(extent[0], (extent[1] + 1) / reduce):
+        for sliceNumber in range(extent[0], old_div((extent[1] + 1), reduce)):
             # the z position of the slice
             x = origin[0] + reduce * sliceNumber * spacing[0]
 
@@ -1090,7 +1095,7 @@ class VolumePlanesFactory(ActorFactory.ActorFactory):
                   origin[2] + spacing[2] * (extent[4] - 0.5),
                   origin[2] + spacing[2] * (extent[5] + 0.5)]
 
-        for sliceNumber in range(extent[2], (extent[3] + 1) / reduce):
+        for sliceNumber in range(extent[2], old_div((extent[3] + 1), reduce)):
             # the y position of the slice
             y = origin[1] + reduce * sliceNumber * spacing[1]
 

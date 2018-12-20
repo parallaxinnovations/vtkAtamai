@@ -1,3 +1,5 @@
+from __future__ import division
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -36,6 +38,9 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from builtins import map
+from builtins import range
+from past.utils import old_div
 __rcs_info__ = {
     #
     #  Creation Information
@@ -114,9 +119,9 @@ Public Methods:
 """
 
 #======================================
-import ActorFactory
-import ClippingCubeFactory
-import PaneFrame
+from . import ActorFactory
+from . import ClippingCubeFactory
+from . import PaneFrame
 import math
 import vtk
 
@@ -238,10 +243,10 @@ class VolumeFactory(ActorFactory.ActorFactory):
             pass
 
         self._VolumeTextureMapper1 = vtk.vtkVolumeTextureMapper2D()
-        self._VolumeTextureMapper1.SetTargetTextureSize(self._TextureSize / 4,
-                                                        self._TextureSize / 4)
+        self._VolumeTextureMapper1.SetTargetTextureSize(old_div(self._TextureSize, 4),
+                                                        old_div(self._TextureSize, 4))
         self._VolumeTextureMapper1.SetMaximumNumberOfPlanes(
-            self._TextureSize / 2)
+            old_div(self._TextureSize, 2))
         self._VolumeTextureMapper1.SetClippingPlanes(
             self._ClippingCube.GetClippingPlanes())
         try:  # vtk 3.2 does not contain this function call:
@@ -422,13 +427,13 @@ class VolumeFactory(ActorFactory.ActorFactory):
         if bounds[4] > bounds[5]:
             bounds[4:6] = [bounds[5], bounds[4]]
 
-        resliceExtent = [0, self._TextureSize / 2 - 1,
-                         0, self._TextureSize / 2 - 1,
-                         0, self._TextureSize / 2 - 1]
+        resliceExtent = [0, old_div(self._TextureSize, 2) - 1,
+                         0, old_div(self._TextureSize, 2) - 1,
+                         0, old_div(self._TextureSize, 2) - 1]
 
-        resliceSpacing = ((bounds[1] - bounds[0]) / (self._TextureSize / 2),
-                          (bounds[3] - bounds[2]) / (self._TextureSize / 2),
-                          (bounds[5] - bounds[4]) / (self._TextureSize / 2))
+        resliceSpacing = (old_div((bounds[1] - bounds[0]), (old_div(self._TextureSize, 2))),
+                          old_div((bounds[3] - bounds[2]), (old_div(self._TextureSize, 2))),
+                          old_div((bounds[5] - bounds[4]), (old_div(self._TextureSize, 2))))
 
         resliceOrigin = (bounds[0] + resliceSpacing[0] * 0.5,
                          bounds[2] + resliceSpacing[1] * 0.5,
@@ -437,12 +442,12 @@ class VolumeFactory(ActorFactory.ActorFactory):
         # first shrink the image & antialias
         shrink = [1, 1, 1]
         for i in range(3):
-            s = int(abs(resliceSpacing[i] / spacing[i]))
+            s = int(abs(old_div(resliceSpacing[i], spacing[i])))
             if s > 1:
                 shrink[i] = s
 
         self._ImagePrefilter1.SetInput(input)
-        self._ImagePrefilter1.SetShrinkFactors(map(int, shrink))
+        self._ImagePrefilter1.SetShrinkFactors(list(map(int, shrink)))
         self._ImagePrefilter1.MeanOn()
         self._ImagePrefilter1.ReleaseDataFlagOn()
 
@@ -483,9 +488,9 @@ class VolumeFactory(ActorFactory.ActorFactory):
                          0, self._TextureSize - 1,
                          0, self._TextureSize - 1]
 
-        resliceSpacing = ((bounds[1] - bounds[0]) / (self._TextureSize),
-                          (bounds[3] - bounds[2]) / (self._TextureSize),
-                          (bounds[5] - bounds[4]) / (self._TextureSize))
+        resliceSpacing = (old_div((bounds[1] - bounds[0]), (self._TextureSize)),
+                          old_div((bounds[3] - bounds[2]), (self._TextureSize)),
+                          old_div((bounds[5] - bounds[4]), (self._TextureSize)))
 
         resliceOrigin = (bounds[0] + resliceSpacing[0] * 0.5,
                          bounds[2] + resliceSpacing[1] * 0.5,
@@ -494,12 +499,12 @@ class VolumeFactory(ActorFactory.ActorFactory):
         # first shrink the image & antialias
         shrink = [1, 1, 1]
         for i in range(3):
-            s = int(abs(resliceSpacing[i] / spacing[i]))
+            s = int(abs(old_div(resliceSpacing[i], spacing[i])))
             if s > 1:
                 shrink[i] = s
 
         self._ImagePrefilter2.SetInput(input)
-        self._ImagePrefilter2.SetShrinkFactors(map(int, shrink))
+        self._ImagePrefilter2.SetShrinkFactors(list(map(int, shrink)))
         self._ImagePrefilter2.MeanOn()
         self._ImagePrefilter2.ReleaseDataFlagOn()
 
@@ -546,11 +551,11 @@ class VolumeFactory(ActorFactory.ActorFactory):
 
         # this is for if we want to warp the volume before renderering
         self._TransformToGrid.SetGridSpacing(
-            map(lambda x: 4 * x, resliceSpacing))
+            [4 * x for x in resliceSpacing])
         self._TransformToGrid.SetGridOrigin(
             resliceOrigin)
         self._TransformToGrid.SetGridExtent(
-            map(lambda x: x / 4, resliceExtent))
+            [old_div(x, 4) for x in resliceExtent])
 
         # set clipping cube bounds
         self._ClippingCube.SetROIBounds(bounds)
@@ -571,7 +576,7 @@ class VolumeFactory(ActorFactory.ActorFactory):
 
         # ray-cast LOD gets the full resolution volume
         self._RayCastReslice.SetInput(input)
-        self._RayCastReslice.SetOutputSpacing(map(abs, spacing))
+        self._RayCastReslice.SetOutputSpacing(list(map(abs, spacing)))
         self._RayCastReslice.ReleaseDataFlagOn()
 
         # we might need to convert from signed to unsigned here...
@@ -719,11 +724,11 @@ class VolumeFactory(ActorFactory.ActorFactory):
                 # cast a ray into the volume from one side
 
                 # get mininum voxel spacing
-                spacing = min(map(abs, self._Input.GetSpacing()))
+                spacing = min(list(map(abs, self._Input.GetSpacing())))
 
                 # get the number of steps required along the length
-                N = int(math.ceil(abs(pathlength / spacing)))
-                dx, dy, dz = (vec[0] / N, vec[1] / N, vec[2] / N)
+                N = int(math.ceil(abs(old_div(pathlength, spacing))))
+                dx, dy, dz = (old_div(vec[0], N), old_div(vec[1], N), old_div(vec[2], N))
                 dr = math.sqrt(dx ** 2 + dy ** 2 + dz ** 2)
 
                 transparency = 1.0
@@ -734,7 +739,7 @@ class VolumeFactory(ActorFactory.ActorFactory):
                     y = y0 + i * dy
                     z = z0 + i * dz
                     value = vol.FunctionValue(
-                        x + dx / 2, y + dy / 2, z + dz / 2)
+                        x + old_div(dx, 2), y + old_div(dy, 2), z + old_div(dz, 2))
                     if self._OpacityTransferFunction:
                         alpha = self._OpacityTransferFunction.GetValue(value)
                     else:
@@ -767,7 +772,7 @@ class VolumeFactory(ActorFactory.ActorFactory):
                         y = y1 - i * dy
                         z = z1 - i * dz
                         value = vol.FunctionValue(
-                            x - dx / 2, y - dy / 2, z - dz / 2)
+                            x - old_div(dx, 2), y - old_div(dy, 2), z - old_div(dz, 2))
                         if self._OpacityTransferFunction:
                             alpha = \
                                 self._OpacityTransferFunction.GetValue(value)

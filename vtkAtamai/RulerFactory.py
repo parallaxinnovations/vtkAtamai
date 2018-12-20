@@ -1,3 +1,6 @@
+from __future__ import division
+from __future__ import print_function
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -36,6 +39,7 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from past.utils import old_div
 __rcs_info__ = {
     #
     #  Creation Information
@@ -113,9 +117,9 @@ To Do:
 
 """
 
-from ActorFactory import *
-from ConeMarkerFactory import *
-from SphereMarkFactory import *
+from .ActorFactory import *
+from .ConeMarkerFactory import *
+from .SphereMarkFactory import *
 import math
 
 
@@ -215,7 +219,7 @@ class RulerFactory(ActorFactory):
         if (self._Mark == None):
             return
         if (self._Planes[0] == None):
-            print "Warning: No Slice Planes have been set for RulerFactory."
+            print("Warning: No Slice Planes have been set for RulerFactory.")
             return
 
         picker = event.picker
@@ -332,7 +336,7 @@ class RulerFactory(ActorFactory):
         # don't need this anymore
         """
         # get extend, origin and spacing from input
-        extent = input.GetWholeExtent()
+        extent = input.GetExtent()
         origin = input.GetOrigin()
         spacing = input.GetSpacing()
         bound = [origin[0]+spacing[0]*(extent[0]-0.5),
@@ -386,8 +390,8 @@ class RulerFactory(ActorFactory):
             worldsize = math.sqrt((x - cx) ** 2 + (y - cy) ** 2 +
                                   (z - cz) ** 2) * \
                 math.tan(0.5 * camera.GetViewAngle() / 57.296)
-        pitch = worldsize / math.sqrt(renderer.GetSize()[0] *
-                                      renderer.GetSize()[1])
+        pitch = old_div(worldsize, math.sqrt(renderer.GetSize()[0] *
+                                      renderer.GetSize()[1]))
         # self._ConePitch = pitch
 
         for child in self.GetChildren():
@@ -413,12 +417,12 @@ class RulerFactory(ActorFactory):
         renderer.SetDisplayPoint(width * 0.9, height * 0.3, z)
         renderer.DisplayToWorld()
         wx, wy, wz, w = renderer.GetWorldPoint()
-        p1 = (wx / w, wy / w, wz / w + 0.0001)
+        p1 = (old_div(wx, w), old_div(wy, w), old_div(wz, w) + 0.0001)
 
         renderer.SetDisplayPoint(width * 0.9, height * 0.7, z)
         renderer.DisplayToWorld()
         wx, wy, wz, w = renderer.GetWorldPoint()
-        p2 = (wx / w, wy / w, wz / w + 0.0001)
+        p2 = (old_div(wx, w), old_div(wy, w), old_div(wz, w) + 0.0001)
 
         if self._ConesInward:
             n1 = (p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2])
@@ -446,7 +450,7 @@ class RulerFactory(ActorFactory):
         self._Line.SetPoint2(p2)
 
     def SetColor(self, *args):
-        apply(self._Property.SetColor, args)
+        self._Property.SetColor(*args)
 
     def SetConesInward(self, yesno):
         self._ConesInward = yesno
@@ -496,7 +500,7 @@ class RulerFactory(ActorFactory):
         self._TextMapper.Modified()
 
     def SetTextColor(self, *args):
-        apply(self._TextActor.GetProperty().SetColor, args)
+        self._TextActor.GetProperty().SetColor(*args)
 
     def Add2DTextToRender(self, ren):
         ren.AddActor2D(self._TextActor)

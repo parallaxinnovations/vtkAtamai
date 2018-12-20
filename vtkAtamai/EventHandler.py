@@ -1,3 +1,4 @@
+from __future__ import print_function
 # =========================================================================
 #
 #   Program:   Atamai Surgical Planning
@@ -43,6 +44,8 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from builtins import str
+from builtins import object
 __rcs_info__ = {
     #
     #  Creation Information
@@ -200,6 +203,7 @@ Bugs, Missing Features:
 
 #======================================
 import time
+import sys
 
 # this is an ugly little hack to switch NumLock and Alt bits for Windows
 import sys
@@ -225,7 +229,7 @@ class Event(object):
 
         """
         if event is not None:
-            for key, val in event.__dict__.items():
+            for key, val in list(event.__dict__.items()):
                 setattr(self, key, val)
 
 #======================================
@@ -268,19 +272,23 @@ class EventHandler(object):
     }
 
     # Dictionary to convert an event type descriptor to a byte.
+    if  sys.version_info.major == 2:
+        _func = intern
+    else:
+        _func = sys.intern
     EventType = {
-        "KeyPress": intern('2'),
-        "Key": intern('2'),
-        "KeyRelease": intern('3'),
-        "ButtonPress": intern('4'),
-        "Button": intern('4'),
-        "ButtonRelease": intern('5'),
-        "Motion": intern('6'),
-        "Enter": intern('7'),
-        "Leave": intern('8'),
-        "FocusIn": intern('9'),
-        "FocusOut": intern('10'),
-        "Configure": intern('22'),
+        "KeyPress": _func('2'),
+        "Key": _func('2'),
+        "KeyRelease": _func('3'),
+        "ButtonPress": _func('4'),
+        "Button": _func('4'),
+        "ButtonRelease": _func('5'),
+        "Motion": _func('6'),
+        "Enter": _func('7'),
+        "Leave": _func('8'),
+        "FocusIn": _func('9'),
+        "FocusOut": _func('10'),
+        "Configure": _func('22'),
     }
 
     def __init__(self):
@@ -381,7 +389,7 @@ class EventHandler(object):
             if modifier in eventList[1]:
                 del eventList[1][modifier]
                 eventList[0] = 0
-                for key in eventList[1].keys():
+                for key in list(eventList[1].keys()):
                     eventList[0] = eventList[0] | key
 
         return oldfunc
@@ -441,34 +449,34 @@ class EventHandler(object):
 
         # type
         d = self.EventType
-        print ('%-13s ' % d.keys()[d.values().index(event.type)]),
+        print(('%-13s ' % list(d.keys())[list(d.values()).index(event.type)]), end=' ')
 
         # num
         try:
-            print ('%3d    ' % (event.num % 1000,)),
+            print(('%3d    ' % (event.num % 1000,)), end=' ')
         except:
-            print ' ??    ',
+            print(' ??    ', end=' ')
 
         # char
         try:
             if event.char >= ' ' and event.char <= '~':
-                print ('%1.1c     ' % event.char),
+                print(('%1.1c     ' % event.char), end=' ')
             else:
-                print ('\\%03.3o' % ord(event.char)),
+                print(('\\%03.3o' % ord(event.char)), end=' ')
         except:
-            print '?? ',
+            print('?? ', end=' ')
 
         # sym
         try:
-            print ('%-13s ' % (event.keysym,)),
+            print(('%-13s ' % (event.keysym,)), end=' ')
         except:
-            print ('%-13s ' % ('??',)),
+            print(('%-13s ' % ('??',)), end=' ')
 
         # position
         try:
-            print ('(%4d,%4d)    ' % (event.x, event.y)),
+            print(('(%4d,%4d)    ' % (event.x, event.y)), end=' ')
         except:
-            print '(    ??,    ??)    ',
+            print('(    ??,    ??)    ', end=' ')
 
         # state
         d = self.EventModifier
@@ -476,9 +484,9 @@ class EventHandler(object):
         i = 1
         while s:
             if s & 0x1:
-                print d.keys()[d.values().index(i)],
+                print(list(d.keys())[list(d.values()).index(i)], end=' ')
             s = s >> 1
             i = i << 1
 
         # end the line
-        print
+        print()

@@ -1,3 +1,6 @@
+from __future__ import division
+from __future__ import print_function
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -36,6 +39,9 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from builtins import map
+from builtins import range
+from past.utils import old_div
 __rcs_info__ = {
     #
     #  Creation Information
@@ -83,13 +89,13 @@ Public Methods:
 
   Specify the image volume:
 
-    SetInput(*imagedata*,*i*=0)   -- set a vtkImageData to slice through
+    SetInputConnection(*imagedata*,*i*=0)   -- set a vtkImageData to slice through
 
-    GetInput(*i*=0)               -- get input *i*
+    GetInputConnection(*i*=0)               -- get input *i*
 
-    AddInput(*imagedata*)         -- add an input after the last input
+    AddInputConnection(*imagedata*)         -- add an input after the last input
 
-    RemoveInput(*i*=0)            -- remove an input
+    RemoveInputConnection(*i*=0)            -- remove an input
 
     GetNumberOfInputs()           -- current number of inputs
 
@@ -177,39 +183,27 @@ Public Methods:
                              line defined by endpoints p1,p2 intersects
                              the plane
 
-  Render onto an arbitrary polygonal shape:
-
-    SetPolyData(*data*) -- the data must lie in the plane of the slice
-
-    GetPolyData() -- get the polydata (will be a plane by default)
-
   Get the implicit function for the slice:
 
     GetPlaneEquation() -- a vtkPlane for e.g. slicing polydata
 
-  Syncronize with an ImagePane:
-
-    SetImagePane(pane) -- set an ImagePane, this will cause the orientation
-                          and position of the SlicePane to be synchronized
-                          with the image pane (this can only be called after
-                          the Input has been set)
-
 """
 
 #======================================
-import ActorFactory
-import OutlineFactory
-from ImagePane import ImagePane
+from . import ActorFactory
+from . import OutlineFactory
 import math
 import vtk
 import logging
 
+logger = logging.getLogger(__name__)
 #======================================
 
 
 class SlicePlaneFactory(ActorFactory.ActorFactory):
 
     def __init__(self):
+
         ActorFactory.ActorFactory.__init__(self)
 
         # generate the pipeline components
@@ -238,9 +232,6 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
         self._Plane.SetXResolution(1)
         self._Plane.SetYResolution(1)
 
-        # user can set polydata to render onto
-        self._PolyData = self._Plane.GetOutput()
-
         self._ResliceAxes = vtk.vtkMatrix4x4()
 
         self._PlaneEquation = None
@@ -255,14 +246,15 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
         self._VolumeBounds = None
         self.__UserAction = None
 
-        # link this SlicePlane to an ImagePane
-        self._ImagePane = None
-
         self.__OutlineColor = (0.0, 1.0, 0.0)
         self._bOutlineIsVisible = False
 
+        outline = OutlineFactory.OutlineFactory()
+        outline.SetInputConnection(self._Plane.GetOutputPort())
+        outline.SetColor(self.__OutlineColor)
+        self.AddChild(outline)
+
         self.BindEvent("<ButtonPress>", self.DoStartAction)
-        self.BindEvent("<ButtonRelease>", self.DoEndAction)
         self.BindEvent("<Motion>", self.DoPush)
 
     def SetDefaultOutlineColor(self, color):
@@ -276,10 +268,9 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
 
         ActorFactory.ActorFactory.tearDown(self)
 
-        for i in self._Inputs.keys():
-            self.RemoveInput(i)
+        for i in list(self._Inputs.keys()):
+            self.RemoveInputConnection(i)
 
-        del(self._PolyData)
         del(self._Plane)
         del(self._ResliceAxes)
 
@@ -288,22 +279,18 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
 
     def SetOutline(self, yesno):
 
-        self._bOutlineIsVisible = bool(yesno)
+        yesno = bool(yesno)
+
+        # abort early if this is a NoOp
+        if self._bOutlineIsVisible == yesno:
+            return
+
+        self._bOutlineIsVisible = yesno
 
         outline = self.GetOutline()
 
-        if (yesno == 1) and (outline is not None):
-            return
-
-        if yesno:
-            outline = OutlineFactory.OutlineFactory()
-            outline.SetInputData(self._PolyData)
-            outline.SetColor(self.__OutlineColor)
-            self.AddChild(outline)
-        else:
-            if outline:
-                self.__OutlineColor = outline.GetColor()
-                self.RemoveChild(outline)
+        if outline:
+            outline.SetVisibility(yesno)
 
     def GetOutline(self):
         try:
@@ -353,24 +340,21 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
             table = self._LookupTables[name]
             if (table and table.GetMTime() > sinceMTime):
                 return 1
-        if self._ImagePane:
-            if self._ImagePane.HasChangedSince(sinceMTime):
-                return 1
         return 0
 
     def GetPlane(self):
         return self._Plane
 
     # Get the output image
-    def GetOutput(self, name=0, color=0, pad=0):
+    def GetOutputPort(self, name=0, color=0, pad=0):
 
-        if self.GetInput(name) is None:
+        if self.GetInputConnection(name) is None:
             return None
 
         if color:
-            output = self._ImageMapToColors[name].GetOutput()
+            output = self._ImageMapToColors[name].GetOutputPort()
         else:
-            output = self._ImageReslicers[name].GetOutput()
+            output = self._ImageReslicers[name].GetOutputPort()
 
         if pad:  # don't clip off the power-of-two padding
             return output
@@ -385,10 +369,7 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
             clip = self._ImagePreClips[name]
 
         # VTK-6
-        if vtk.vtkVersion().GetVTKMajorVersion() > 5:
-            clip.SetInputDataObject(output)
-        else:
-            clip.SetInput(output)
+        clip.SetInputConnection(output)
 
         # need all this garbage to determine what part of ImageReslice's
         # output extent is being mapped onto the plane
@@ -417,12 +398,12 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
             name].GetOutputSpacing()
 
         # calculate the extent
-        extentX = int(math.floor(planeSizeX / spacingX + 0.5))
-        extentY = int(math.floor(planeSizeY / spacingY + 0.5))
+        extentX = int(math.floor(old_div(planeSizeX, spacingX) + 0.5))
+        extentY = int(math.floor(old_div(planeSizeY, spacingY) + 0.5))
 
         clip.SetOutputWholeExtent(0, extentX - 1, 0, extentY - 1, 0, 0)
 
-        return clip.GetOutput()
+        return clip.GetOutputPort()
 
     def GetPlaneEquation(self):
         # return the vtkPlane which describes the plane
@@ -437,28 +418,34 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
 
     def OnExecuteInformation(self, colors, event="ExecuteInformationEvent"):
 
-        input = colors.GetInput()
+        image = colors.GetInput()
 
         # VTK-6
         # if vtk.vtkVersion().GetVTKMajorVersion() > 5:
         #    print 'SlicePlaneFactory:OnExecuteInformation - fix UpdateInformation()!'
-        #    #input.UpdateInformation()  # TODO: VTK-6 figure out what to do here
+        #    #image.UpdateInformation()  # TODO: VTK-6 figure out what to do here
         # else:
-        # input.UpdateInformation()  # TODO: VTK-6 figure out what to do here
+        # image.UpdateInformation()  # TODO: VTK-6 figure out what to do here
+
+        # 2017-05-18: colors must be updated here otherwise we handle e.g. RGB pngs incorrectly
+        if vtk.vtkVersion().GetVTKMajorVersion() > 5:
+            if colors.GetLookupTable() is None:
+                colors.SetLookupTable(vtk.vtkLookupTable())  # provide a dummy table
+            colors.Update()
 
         for name in self._ImageMapToColors:
             if colors == self._ImageMapToColors[name]:
                 break
 
-        if input.GetNumberOfScalarComponents() == 3:
+        if image.GetNumberOfScalarComponents() == 3:
             colors.SetOutputFormatToRGB()
-            if self._LookupTables[name] and input.GetScalarType() != 3:
+            if self._LookupTables[name] and image.GetScalarType() != 3:
                 colors.SetLookupTable(self._LookupTables[name])
             else:
                 colors.SetLookupTable(None)
-        elif input.GetNumberOfScalarComponents() == 4:
+        elif image.GetNumberOfScalarComponents() == 4:
             colors.SetOutputFormatToRGBA()
-            if self._LookupTables[name] and input.GetScalarType() != 3:
+            if self._LookupTables[name] and image.GetScalarType() != 3:
                 colors.SetLookupTable(self._LookupTables[name])
             else:
                 colors.SetLookupTable(None)
@@ -470,7 +457,13 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
             else:
                 colors.SetOutputFormatToRGBA()
 
-    def AddInputData(self, input, name=None):
+    def AddInputData(self, image_data, name=None):
+
+        alg = vtk.vtkTrivialProducer()
+        alg.SetOutput(image_data)
+        self.AddInputConnection(alg.GetOutputPort(), name=name)
+
+    def AddInputConnection(self, alg, name=None, table=None):
 
         # this change permits sliceplanefactory to be named - fallback is to
         # use a numerical index
@@ -498,11 +491,7 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
             reslice.SetInterpolationModeToNearestNeighbor()
         reslice.SetOptimization(2)
 
-        # VTK-6
-        if vtk.vtkVersion().GetVTKMajorVersion() > 5:
-            reslice.SetInputData(input)
-        else:
-            reslice.SetInput(input)
+        reslice.SetInputConnection(alg)
 
         colors = vtk.vtkImageMapToColors()
         colors.AddObserver('OnExecuteInformation', self.OnExecuteInformation)
@@ -514,22 +503,20 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
             pass
 
         coords = vtk.vtkTextureMapToPlane()
-        # VTK-6
-        if vtk.vtkVersion().GetVTKMajorVersion() > 5:
-            coords.SetInputData(self._PolyData)
-        else:
-            coords.SetInput(self._PolyData)
+        coords.SetInputConnection(self._Plane.GetOutputPort())
         coords.AutomaticPlaneGenerationOff()
 
         property = vtk.vtkProperty()
 
-        self._Inputs[name] = input
+        self._Inputs[name] = alg
         self._ImageReslicers[name] = reslice
         self._ResliceTransforms[name] = resliceTransform
         self._ImageMapToColors[name] = colors
         self._TextureCoords[name] = coords
         self._Properties[name] = property
-        self._LookupTables[name] = None
+
+        self.SetLookupTable(table, name=name)
+
         self._ImagePreClips[name] = None
         self._ImagePostClips[name] = None
         self._ImageTransforms[name] = None
@@ -543,14 +530,14 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
             actors[renderer][name] = actor
             renderer.AddActor(actor)
 
-        # JDG self.OnExecuteInformation(colors)
+        ## JDG self.OnExecuteInformation(colors)
         self._UpdateNormal()
         self._UpdateOrigin()
         self.Modified()
 
         return name
 
-    def RemoveInput(self, name=0):
+    def RemoveInputConnection(self, name=0):
 
         actors = self._ActorDict
         for renderer in self._Renderers:
@@ -582,56 +569,36 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
 
         self.Modified()
 
-    def SetInputConnection(self, input_connection, name=0):
-        import pdb
-        pdb.set_trace()
-        # TODO: implement me
+    def SetInputData(self, image_data, name=0, table=None):
 
-    def SetInputData(self, image_data, name=0):
+        alg = vtk.vtkTrivialProducer()
+        alg.SetOutput(image_data)
+        self.SetInputConnection(alg.GetOutputPort(), name=name, table=table)
+
+    def SetInputConnection(self, alg, name=0, table=None):
 
         if name not in self._Inputs:
-            self.AddInputData(image_data, name)
+            self.AddInputConnection(alg, name, table=table)
             return
 
-        self._Inputs[name] = image_data
-
-        # VTK-6
-        if vtk.vtkVersion().GetVTKMajorVersion() > 5:
-            self._ImageReslicers[name].SetInputData(image_data)
-        else:
-            self._ImageReslicers[name].SetInput(image_data)
+        self._Inputs[name] = alg
+        self._ImageReslicers[name].SetInputConnection(alg)
+        self.SetLookupTable(name, table)
 
         # self.OnExecuteInformation(self._ImageMapToColors[name])
+
+        self.UpdatePlaneExtent()
+
         self._UpdateNormal()
         self._UpdateOrigin()
         self.Modified()
 
-    def GetInput(self, name=0):
-        """Returns the vtkImageData input associated with this slice plane"""
+    def GetInputConnection(self, name=0):
+        """Returns the input port associated with this slice plane"""
         if name in self._Inputs:
             return self._Inputs[name]
         else:
             return None
-
-    def GetInputConnection(self, name=0):
-        import pdb
-        pdb.set_trace()
-
-    def SetPolyData(self, data):
-        if (data):
-            self._PolyData = data
-            for coords in self._TextureCoords:
-                coords.SetInput(data)
-        else:
-            self._PolyData = self._Plane.GetOutput()
-        try:
-            self.GetChild("Outline").SetInput(data)
-        except KeyError:
-            logging.error('SlicePlaneFactory:SetPolyData - KeyError occurred')
-        self.Modified()
-
-    def GetPolyData(self):
-        return self._PolyData
 
     def SetClippingPlanes(self, clippingPlanes, name=0):
 
@@ -707,7 +674,8 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
 
         # the lookup table associated with the image data
         self._LookupTables[name] = table
-        self.OnExecuteInformation(self._ImageMapToColors[name])
+        if name in self._ImageMapToColors:
+            self.OnExecuteInformation(self._ImageMapToColors[name])
         for renderer in self._Renderers:
             actors = self._ActorDict[renderer]
             if name in actors:
@@ -732,9 +700,12 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
 
         if renderer is None:
             for ren in self._Renderers:
-                self._ActorDict[ren][name].SetVisibility(yesno)
+                if name in self._ActorDict[ren]:
+                    self._ActorDict[ren][name].SetVisibility(yesno)
         else:
-            self._ActorDict[renderer][name].SetVisibility(yesno)
+            if name in self._ActorDict[renderer]:
+                self._ActorDict[renderer][name].SetVisibility(yesno)
+
         self.Modified()
 
     def GetVisibility(self, name=0, renderer=None):
@@ -752,7 +723,7 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
 
     def SetImageTransform(self, trans, name=0):
 
-        if (trans == self._ImageTransforms[name]):
+        if (trans is self._ImageTransforms.get(name, None)):
             return
 
         # the TransformGrid is used to accelerate nonlinear transforms
@@ -802,7 +773,7 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
         self.Modified()
 
     def GetImageTransform(self, name=0):
-        return self._ImageTransforms[name]
+        return self._ImageTransforms.get(name, None)
 
     def GeneratePlaneFromPolyData(self):
         # generate a plane which is aligned with the polydata --
@@ -827,18 +798,25 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
         # this method must be called _after_ SetInput
 
         self._PlaneOrientation = i
+        self.UpdatePlaneExtent()
 
-        input = self._ImageReslicers[0].GetInput()
+        self._UpdateNormal()
+        self._UpdateOrigin()
+        self._Plane.Update()
 
-        # VTK-6
-        if vtk.vtkVersion().GetVTKMajorVersion() > 5:
-            print 'SlicePlaneFactory:SetPlaneOrientation - fix me!'
-            extent = input.GetExtent()
-        else:
-            extent = input.GetWholeExtent()
+        self.Modified()
 
-        origin = input.GetOrigin()
-        spacing = input.GetSpacing()
+    def UpdatePlaneExtent(self):
+
+        if self._PlaneOrientation is None:
+            return
+
+        i = self._PlaneOrientation
+
+        image = self._ImageReslicers[0].GetInput()
+        extent = image.GetExtent()
+        origin = image.GetOrigin()
+        spacing = image.GetSpacing()
 
         xbounds = [origin[0] + spacing[0] * (extent[0] - 0.5),
                    origin[0] + spacing[0] * (extent[1] + 0.5)]
@@ -885,12 +863,6 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
         else:
             raise ValueError("unrecognized orientation")
 
-        self._UpdateNormal()
-        self._UpdateOrigin()
-        self._Plane.Update()
-
-        self.Modified()
-
     def SetSlicePosition(self, position):
         # set the position of the slice along its normal
         plane = self._Plane
@@ -904,7 +876,7 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
         elif (planeNormalX == 0 and planeNormalZ == 0):
             amount = (position - planeOriginY) * planeNormalY
         else:
-            logging.error(
+            logger.error(
                 "SetSlicePosition() only works for xy, xz, or yz planes")
         self.Push(amount)
 
@@ -920,25 +892,25 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
         elif planeNormalX == 0 and planeNormalZ == 0:
             return planeOriginY
         else:
-            logging.error(
+            logger.error(
                 "GetSlicePosition() only works for xy, xz, or yz planes")
 
     def SetSliceIndex(self, index):
 
         # set the slice index in terms of the data extent
-        input = self._ImageReslicers[0].GetInput()
+        image = self._ImageReslicers[0].GetInput()
 
         # VTK-6
         if vtk.vtkVersion().GetVTKMajorVersion() > 5:
-            print 'SlicePlaneFactory:SetSliceIndex - fix UpdateInformation()!'
-            # input.UpdateInformation()  # TODO: VTK-6 figure out what to do
+            print('SlicePlaneFactory:SetSliceIndex - fix UpdateInformation()!')
+            # image.UpdateInformation()  # TODO: VTK-6 figure out what to do
             # here
         else:
-            input.UpdateInformation()  # TODO: VTK-6 figure out what to do here
+            image.UpdateInformation()  # TODO: VTK-6 figure out what to do here
 
-        originX, originY, originZ = input.GetOrigin()
-        spacingX, spacingY, spacingZ = input.GetSpacing()
-        del input
+        originX, originY, originZ = image.GetOrigin()
+        spacingX, spacingY, spacingZ = image.GetSpacing()
+        del image
 
         planeOriginX, planeOriginY, planeOriginZ = self._Plane.GetOrigin()
         planeNormalX, planeNormalY, planeNormalZ = self._Plane.GetNormal()
@@ -951,7 +923,7 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
         elif (planeNormalX == 0 and planeNormalZ == 0):
             amount = (originY + index * spacingY - planeOriginY) * planeNormalY
         else:
-            logging.error(
+            logger.error(
                 "SetSliceIndex() only works for xy, xz, or yz planes")
 
         self.Push(amount)
@@ -962,29 +934,29 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
         if len(self._ImageReslicers) == 0:
             return -1
 
-        input = self._ImageReslicers[0].GetInput()
+        image = self._ImageReslicers[0].GetInput()
 
         # VTK-6
         # if vtk.vtkVersion().GetVTKMajorVersion() > 5:
         #    print 'SlicePlaneFactory:GetSliceIndex - fix UpdateInformation()!'
-        #    #input.UpdateInformation()  # TODO: VTK-6 figure out what to do here
+        #    #image.UpdateInformation()  # TODO: VTK-6 figure out what to do here
         # else:
-        # input.UpdateInformation()  # TODO: VTK-6 figure out what to do here
+        # image.UpdateInformation()  # TODO: VTK-6 figure out what to do here
 
         planeOriginX, planeOriginY, planeOriginZ = plane.GetOrigin()
         planeNormalX, planeNormalY, planeNormalZ = plane.GetNormal()
-        originX, originY, originZ = input.GetOrigin()
-        spacingX, spacingY, spacingZ = input.GetSpacing()
-        del input
+        originX, originY, originZ = image.GetOrigin()
+        spacingX, spacingY, spacingZ = image.GetSpacing()
+        del image
 
         if planeNormalX == 0 and planeNormalY == 0:
-            return (planeOriginZ - originZ) / spacingZ
+            return old_div((planeOriginZ - originZ), spacingZ)
         elif planeNormalY == 0 and planeNormalZ == 0:
-            return (planeOriginX - originX) / spacingX
+            return old_div((planeOriginX - originX), spacingX)
         elif planeNormalX == 0 and planeNormalZ == 0:
-            return (planeOriginY - originY) / spacingY
+            return old_div((planeOriginY - originY), spacingY)
         else:
-            logging.error(
+            logger.error(
                 "GetSliceIndex() only works for xy, xz, or yz planes")
 
         plane.SetOrigin(planeOriginX, planeOriginY, planeOriginZ)
@@ -1000,137 +972,8 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
         n = self.GetTransformedNormal()
         self.Modified()
 
-        if self._ImagePane:
-            matrix = self._ImagePane.GetResliceAxes()
-            nx, ny, nz, w = matrix.MultiplyPoint((0, 0, 1, 0))
-            x0, y0, z0 = self._ImagePane.GetCenterCoords()
-            x, y, z = self._Plane.GetOrigin()
-            d = (x - x0) * nx + (y - y0) * ny + (z - z0) * nz
-            s = self._ImagePane.GetTransformedSpacing()[2]
-            slice = self._ImagePane.GetSlice()
-            self._ImagePane.SetSlice(slice + d / s)
-
         # return the actual amount pushed, in case we hit bounds
         return (o2[0] - o1[0]) * n[0] + (o2[1] - o1[1]) * n[1] + (o2[2] - o1[2]) * n[2]
-
-    def OnRenderEvent(self, ren, event):
-
-        if self._ImagePane:
-            for i in range(self._ImagePane.GetNumberOfInputs()):
-                input = ImagePane.GetInput(self._ImagePane, i)
-                if input:
-                    if input != self.GetInput(i):
-                        self.SetInput(input, i)
-                        self.SetImageTransform(
-                            self._ImagePane.GetResliceTransform(i).GetInverse(), i)
-                    self.SetLookupTable(ImagePane.GetLookupTable(
-                        self._ImagePane, i), i)
-                    self.SetOpacity(self._ImagePane.GetOpacity(i), i)
-            x, y, z = self._ImagePane.GetCenterCoords()
-            x0, y0, z0 = self._Plane.GetOrigin()
-            nx, ny, nz = self._Plane.GetNormal()
-            d = (x - x0) * nx + (y - y0) * ny + (z - z0) * nz
-            if abs(d) > 1e-30:
-                self._Plane.Push(d)
-                self._UpdateOrigin()
-
-    def AddToRenderer(self, ren):
-        ActorFactory.ActorFactory.AddToRenderer(self, ren)
-        ren.AddObserver('StartEvent', self.OnRenderEvent)
-
-    def SetImagePane(self, pane):
-        self._ImagePane = pane
-        self._UpdateFromImagePane()
-
-    def GetImagePane(self):
-        return self._ImagePane
-
-    def _UpdateFromImagePane(self):
-        input = self._ImageReslicers[0].GetInput()
-        input.UpdateInformation()
-
-        extent = input.GetWholeExtent()
-        origin = input.GetOrigin()
-        spacing = input.GetSpacing()
-
-        bounds = [origin[0] + spacing[0] * (extent[0] - 0.5),
-                  origin[0] + spacing[0] * (extent[1] + 0.5),
-                  origin[1] + spacing[1] * (extent[2] - 0.5),
-                  origin[1] + spacing[1] * (extent[3] + 0.5),
-                  origin[2] + spacing[2] * (extent[4] - 0.5),
-                  origin[2] + spacing[2] * (extent[5] + 0.5)]
-
-        transform = self._ImagePane.GetResliceTransform()
-        if transform:
-            transform = transform.GetInverse()
-            corners = [(bounds[0], bounds[2], bounds[4]),
-                       (bounds[0], bounds[2], bounds[5]),
-                       (bounds[0], bounds[3], bounds[4]),
-                       (bounds[0], bounds[3], bounds[5]),
-                       (bounds[1], bounds[2], bounds[4]),
-                       (bounds[1], bounds[2], bounds[5]),
-                       (bounds[1], bounds[3], bounds[4]),
-                       (bounds[1], bounds[3], bounds[5])]
-
-            for i in range(8):
-                corners[i] = transform.TransformPoint(corners[i])
-
-            bounds = [min(map(lambda a: a[0], corners)),
-                      max(map(lambda a: a[0], corners)),
-                      min(map(lambda a: a[1], corners)),
-                      max(map(lambda a: a[1], corners)),
-                      min(map(lambda a: a[2], corners)),
-                      max(map(lambda a: a[2], corners))]
-
-        center = [0.5 * (bounds[0] + bounds[1]),
-                  0.5 * (bounds[2] + bounds[3]),
-                  0.5 * (bounds[4] + bounds[5])]
-
-        size = map(abs, [0.5 * (bounds[1] - bounds[0]),
-                         0.5 * (bounds[3] - bounds[2]),
-                         0.5 * (bounds[5] - bounds[4])])
-
-        self._VolumeBounds = bounds
-
-        self._Plane.SetXResolution(1)
-        self._Plane.SetYResolution(1)
-
-        matrix = self._ImagePane.GetResliceAxes()
-
-        nx, ny, nz, w = matrix.MultiplyPoint((0, 0, 1, 0))
-        vx, vy, vz, w = matrix.MultiplyPoint((0, 1, 0, 0))
-        ux, uy, uz, w = matrix.MultiplyPoint((1, 0, 0, 0))
-
-        xsize = math.sqrt((ux * size[0]) ** 2 +
-                          (uy * size[1]) ** 2 +
-                          (uz * size[2]) ** 2)
-
-        ysize = math.sqrt((vx * size[0]) ** 2 +
-                          (vy * size[1]) ** 2 +
-                          (vz * size[2]) ** 2)
-
-        # do a dummy set first, to avoid "bad coord system" error
-
-        self._Plane.SetOrigin(-1235.6, -1235.6, -1235.6)
-        self._Plane.SetPoint1(+1235.6, -1235.6, -1235.6)
-        self._Plane.SetPoint2(-1235.6, +1235.6, -1235.6)
-
-        # set for real
-        self._Plane.SetOrigin(center[0] - xsize * ux - ysize * vx,
-                              center[1] - xsize * uy - ysize * vy,
-                              center[2] - xsize * uz - ysize * vz)
-        self._Plane.SetPoint1(center[0] + xsize * ux - ysize * vx,
-                              center[1] + xsize * uy - ysize * vy,
-                              center[2] + xsize * uz - ysize * vz)
-        self._Plane.SetPoint2(center[0] - xsize * ux + ysize * vx,
-                              center[1] - xsize * uy + ysize * vy,
-                              center[2] - xsize * uz + ysize * vz)
-
-        self._UpdateNormal()
-        self._UpdateOrigin()
-        # plane output doesn't seem to get updated automatically in VTK6
-        self._Plane.Update()
-        self.Modified()
 
     def SetNormal(self, *a):
         # set the normal of the slice plane
@@ -1154,7 +997,7 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
         p1 = self._Plane.GetPoint1()
         vec = (p1[0] - o[0], p1[1] - o[1], p1[2] - o[2])
         norm = math.sqrt(vec[0] ** 2 + vec[1] ** 2 + vec[2] ** 2)
-        return (vec[0] / norm, vec[1] / norm, vec[2] / norm)
+        return (old_div(vec[0], norm), old_div(vec[1], norm), old_div(vec[2], norm))
 
     def GetTransformedVector1(self):
         return self._Transform.TransformVector(self.GetVector1())
@@ -1165,7 +1008,7 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
         p2 = self._Plane.GetPoint2()
         vec = (p2[0] - o[0], p2[1] - o[1], p2[2] - o[2])
         norm = math.sqrt(vec[0] ** 2 + vec[1] ** 2 + vec[2] ** 2)
-        return vec[0] / norm, vec[1] / norm, vec[2] / norm
+        return old_div(vec[0], norm), old_div(vec[1], norm), old_div(vec[2], norm)
 
     def GetTransformedVector2(self):
         return self._Transform.TransformVector(self.GetVector2())
@@ -1295,8 +1138,8 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
         renderer.DisplayToWorld()
         lx2, ly2, lz2, w2 = renderer.GetWorldPoint()
 
-        return self.IntersectWithLine((lx1 / w1, ly1 / w1, lz1 / w1),
-                                      (lx2 / w2, ly2 / w2, lz2 / w2))
+        return self.IntersectWithLine((old_div(lx1, w1), old_div(ly1, w1), old_div(lz1, w1)),
+                                      (old_div(lx2, w2), old_div(ly2, w2), old_div(lz2, w2)))
 
     def IntersectWithLine(self, p1, p2):
         # return the intersection of the line with endpoints p1,p2 with plane
@@ -1315,8 +1158,8 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
 
         # divide-by-zero exception will be thrown in there is no intersection
 
-        t = (nx * (cx - p1[0]) + ny * (cy - p1[1]) + nz * (cz - p1[2])) /   \
-            dotprod
+        t = old_div((nx * (cx - p1[0]) + ny * (cy - p1[1]) + nz * (cz - p1[2])),   \
+            dotprod)
 
         return (p1[0] + t * lx, p1[1] + t * ly, p1[2] + t * lz)
 
@@ -1326,23 +1169,16 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
 
         # restrict plane to bounds of image
         if (self._RestrictPlaneToVolume):
+            producer = self.GetInputConnection().GetProducer()
+            producer.UpdateInformation()
+            image = producer.GetOutputDataObject(0)
+            spacing = image.GetSpacing()
             if self._VolumeBounds:
                 bounds = self._VolumeBounds
-                spacing = self.GetInput().GetSpacing()
             else:
-                input = self.GetInput()
 
-                # VTK-6
-                # if vtk.vtkVersion().GetVTKMajorVersion() > 5:
-                #    print 'SlicePlaneFactory:_UpdateOrigin - fix UpdateInformation()!'
-                #    #input.UpdateInformation()  # TODO: VTK-6 figure out what to do here
-                # else:
-                # input.UpdateInformation()  # TODO: VTK-6 figure out what to
-                # do here
-
-                origin = input.GetOrigin()
-                spacing = input.GetSpacing()
-                extent = input.GetExtent()
+                origin = image.GetOrigin()
+                extent = image.GetExtent()
                 # UpdateInformation don't give us updated bounds, so we
                 # calculate it here
                 bounds = [
@@ -1362,7 +1198,7 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
                     bounds[2 * i + 1] = bounds[2 * i + 1] - \
                         spacing[i] * 0.000001
 
-            abs_normal = map(abs, self._Plane.GetNormal())
+            abs_normal = list(map(abs, self._Plane.GetNormal()))
             center = list(self._Plane.GetCenter())
             i = abs_normal.index(max(abs_normal))
             if center[i] > bounds[2 * i + 1]:
@@ -1413,11 +1249,11 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
                 self._TransformGrids[name].SetGridOrigin(
                     reslice.GetOutputOrigin())
                 self._TransformGrids[name].SetGridSpacing(
-                    map(lambda x: 4 * x, reslice.GetOutputSpacing()))
+                    [4 * x for x in reslice.GetOutputSpacing()])
                 self._TransformGrids[name].SetGridExtent(
-                    map(lambda x: x / 4, reslice.GetOutputExtent()))
+                    [old_div(x, 4) for x in reslice.GetOutputExtent()])
 
-        self.Modified()
+        ## JDG self.Modified()
 
     def _UpdateNormal(self):
 
@@ -1451,13 +1287,13 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
             return
 
         # the x,y axes of the plane (the z-axis is the normal)
-        planeAxis1[0] = planeAxis1[0] / planeSizeX
-        planeAxis1[1] = planeAxis1[1] / planeSizeX
-        planeAxis1[2] = planeAxis1[2] / planeSizeX
+        planeAxis1[0] = old_div(planeAxis1[0], planeSizeX)
+        planeAxis1[1] = old_div(planeAxis1[1], planeSizeX)
+        planeAxis1[2] = old_div(planeAxis1[2], planeSizeX)
 
-        planeAxis2[0] = planeAxis2[0] / planeSizeY
-        planeAxis2[1] = planeAxis2[1] / planeSizeY
-        planeAxis2[2] = planeAxis2[2] / planeSizeY
+        planeAxis2[0] = old_div(planeAxis2[0], planeSizeY)
+        planeAxis2[1] = old_div(planeAxis2[1], planeSizeY)
+        planeAxis2[2] = old_div(planeAxis2[2], planeSizeY)
 
         # generate the slicing matrix
         matrix = self._ResliceAxes
@@ -1494,19 +1330,19 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
         for name in self._Inputs:
             reslice = self._ImageReslicers[name]
             coords = self._TextureCoords[name]
-            input = reslice.GetInput()
+            image = reslice.GetInput()
 
             # calculate appropriate pixel spacing for the reslicing
 
             # VTK-6
             # if vtk.vtkVersion().GetVTKMajorVersion() > 5:
             #    print 'SlicePlaneFactory:_UpdateNormal - fix UpdateInformation()!'
-            #    #input.UpdateInformation()  # TODO: VTK-6 figure out what to do here
+            #    #image.UpdateInformation()  # TODO: VTK-6 figure out what to do here
             # else:
-            # input.UpdateInformation()  # TODO: VTK-6 figure out what to do
+            # image.UpdateInformation()  # TODO: VTK-6 figure out what to do
             # here
 
-            spacing = input.GetSpacing()
+            spacing = image.GetSpacing()
 
             spacingX = abs(planeAxis1[0] * spacing[0]) +\
                 abs(planeAxis1[1] * spacing[1]) +\
@@ -1516,24 +1352,21 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
                 abs(planeAxis2[1] * spacing[1]) +\
                 abs(planeAxis2[2] * spacing[2])
 
-            if self._ImagePane and self._ImagePane.GetInput(name) is not None:
-                spacingX, spacingY, spacingZ = self._ImagePane.GetTransformedSpacing(
-                    name)
-
             # pad extent up to a power of two for efficient texture mapping
 
             extentX = 1
-            while (extentX < planeSizeX / spacingX):
+            while (extentX < old_div(planeSizeX, spacingX)):
                 extentX = extentX << 1
 
             extentY = 1
-            while (extentY < planeSizeY / spacingY):
+            while (extentY < old_div(planeSizeY, spacingY)):
                 extentY = extentY << 1
 
             reslice.SetOutputSpacing(spacingX, spacingY, 1)
             reslice.SetOutputOrigin(0.5 * spacingX + originX,
                                     0.5 * spacingY + originY,
                                     0.0)
+
             reslice.SetOutputExtent(0, extentX - 1, 0, extentY - 1, 0, 0)
 
             # set up a transform grid for nonlinear transform acceleration
@@ -1541,9 +1374,9 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
                 self._TransformGrids[name].SetGridOrigin(
                     reslice.GetOutputOrigin())
                 self._TransformGrids[name].SetGridSpacing(
-                    map(lambda x: 4 * x, reslice.GetOutputSpacing()))
+                    [4 * x for x in reslice.GetOutputSpacing()])
                 self._TransformGrids[name].SetGridExtent(
-                    map(lambda x: x / 4, reslice.GetOutputExtent()))
+                    [old_div(x, 4) for x in reslice.GetOutputExtent()])
 
             # find expansion factor to account for increasing the extent
             # to a power of two
@@ -1573,10 +1406,6 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
     def DoStartAction(self, event):
         self._LastX = event.x
         self._LastY = event.y
-        if self._ImagePane:
-            self._ImagePane.DynamicOn()
-            for pane in self._ImagePane.GetSyncPanes():
-                pane.DynamicOn()
 
         self._oldOutlineVisibility = self.GetOutlineVisibility()
         self.OutlineOn()
@@ -1589,12 +1418,6 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
             self.SetOutlineColor(self._RotateColor)
         elif action == 'Spin':
             self.SetOutlineColor(self._SpinColor)
-
-    def DoEndAction(self, event):
-        if self._ImagePane:
-            self._ImagePane.DynamicOff()
-            for pane in self._ImagePane.GetSyncPanes():
-                pane.DynamicOff()
 
         # Make Plane Outline Invisible
         self.SetOutlineColor(self._DefaultOutlineColor)
@@ -1627,7 +1450,7 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
         renderer.SetDisplayPoint(event.x, event.y, z)
         renderer.DisplayToWorld()
         wx, wy, wz, w = renderer.GetWorldPoint()
-        wx, wy, wz = (wx / w, wy / w, wz / w)
+        wx, wy, wz = (old_div(wx, w), old_div(wy, w), old_div(wz, w))
 
         # mouse motion vector, in world coords
         dx, dy, dz = (wx - lx, wy - ly, wz - lz)
@@ -1639,8 +1462,8 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
 
         if (abs(n_dot_v) < 0.9):
             # drag plane to exactly match cursor motion
-            dd = (dx * (nx - vx * n_dot_v) + dy * (ny - vy * n_dot_v) + dz * (nz - vz * n_dot_v)) / \
-                 (1.0 - n_dot_v * n_dot_v)
+            dd = old_div((dx * (nx - vx * n_dot_v) + dy * (ny - vy * n_dot_v) + dz * (nz - vz * n_dot_v)), \
+                 (1.0 - n_dot_v * n_dot_v))
         else:
             # plane is perpendicular to viewing ray, so just push by distance
             dd = math.sqrt(dx * dx + dy * dy + dz * dz)
@@ -1649,7 +1472,7 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
 
         # find the fraction of the push that was done, in case we hit bounds
         if dd != 0:
-            f = self.Push(dd) / dd
+            f = old_div(self.Push(dd), dd)
         else:
             f = 1.0
 
@@ -1676,12 +1499,8 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
         actor.GetProperty().SetColor(1, 0, 0)
         actor.VisibilityOff()
         mapper = vtk.vtkDataSetMapper()
-        # VTK-6
-        if vtk.vtkVersion().GetVTKMajorVersion() > 5:
-            self._Plane.Update()  # VTK-6 force a pipeline update
-            mapper.SetInputConnection(self._Plane.GetOutputPort())
-        else:
-            mapper.SetInput(self._PolyData)
+        self._Plane.Update()  # VTK-6 force a pipeline update
+        mapper.SetInputConnection(self._Plane.GetOutputPort())
         actor.SetMapper(mapper)
         actors['red'] = actor
 
@@ -1691,7 +1510,7 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
 
     def _NewActor(self, name=0):
 
-        # construct the graphics pipeline for input `name`
+        # construct the graphics pipeline for image `name`
         actor = ActorFactory.ActorFactory._NewActor(self)
 
         mapper = vtk.vtkDataSetMapper()
@@ -1704,19 +1523,19 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
         if self.GetClippingPlanes(name) is not None:
             mapper.SetClippingPlanes(self.GetClippingPlanes(name))
 
-        texture = vtk.vtkTexture()
-        texture.SetQualityTo32Bit()
-        texture.MapColorScalarsThroughLookupTableOff()
-        texture.SetInputConnection(
+        self.texture = vtk.vtkTexture()
+        self.texture.SetQualityTo32Bit()
+        self.texture.MapColorScalarsThroughLookupTableOff()
+        self.texture.SetInputConnection(
             self._ImageMapToColors[name].GetOutputPort())
-        texture.SetInterpolate(self._TextureInterpolate)
-        texture.RepeatOff()  # only necessary if interpolation is on
+        self.texture.SetInterpolate(self._TextureInterpolate)
+        self.texture.RepeatOff()  # only necessary if interpolation is on
         if (self._LookupTables[name]):
-            texture.SetLookupTable(self._LookupTables[name])
+            self.texture.SetLookupTable(self._LookupTables[name])
 
         actor.SetProperty(self._Properties[name])
         self._Properties[name].SetAmbient(0.5)
         actor.SetMapper(mapper)
-        actor.SetTexture(texture)
+        actor.SetTexture(self.texture)
 
         return actor

@@ -1,3 +1,5 @@
+from __future__ import division
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -35,6 +37,8 @@
 #
 # This file represents a derivative work by Parallax Innovations Inc.
 #
+from builtins import map
+from past.utils import old_div
 __rcs_info__ = {
     #
     #  Creation Information
@@ -95,7 +99,7 @@ Public Methods:
 """
 
 #======================================
-from ActorFactory import *
+from .ActorFactory import *
 import math
 
 #======================================
@@ -105,8 +109,6 @@ class AnatomicalLabelsFactory(ActorFactory):
 
     def __init__(self, labels=['L', 'R', 'P', 'A', 'I', 'S']):
         ActorFactory.__init__(self)
-
-        self._Input = None
 
         self._PositiveProperty = vtk.vtkProperty()
         self._PositiveProperty.SetColor(0.0, 1.0, 0.0)
@@ -125,14 +127,15 @@ class AnatomicalLabelsFactory(ActorFactory):
     def GetScale(self):
         return self._Scale
 
-    def SetInputData(self, input):
-        self._Input = input
+    def SetInputConnection(self, alg):
 
-        # TODO: port to VTK6
-        # input.UpdateInformation()
+        self._Input = alg
+        producer = alg.GetProducer()
+        alg.GetProducer().UpdateInformation()
+        image = producer.GetOutputDataObject(0)
 
         # scale
-        e = input.GetExtent()
+        e = image.GetExtent()
         size1 = (e[1] - e[0] + e[3] - e[2]) * 0.5
         self._Scale = size1 * 0.05
         if e[5] - e[4] > 0:
@@ -142,8 +145,8 @@ class AnatomicalLabelsFactory(ActorFactory):
 
         self._Scale = 6.0
 
-        spacing = input.GetSpacing()
-        xmin, ymin, zmin = input.GetOrigin()
+        spacing = image.GetSpacing()
+        xmin, ymin, zmin = image.GetOrigin()
         xmax, ymax, zmax = xmin + e[1] * spacing[0], ymin + e[
             3] * spacing[1], zmin + e[5] * spacing[2]
 
@@ -255,20 +258,20 @@ class AnatomicalLabelsFactory(ActorFactory):
         # permute actor positions according to transform
         transform = self._Transform.GetInverse()
         vec = list(transform.TransformVector(1, 0, 0))
-        avec = map(abs, vec)
+        avec = list(map(abs, vec))
         i = avec.index(max(avec))
-        isign = int(avec[i] / vec[i])
+        isign = int(old_div(avec[i], vec[i]))
         vec = list(transform.TransformVector(0, 1, 0))
         vec[i] = 0.0
-        avec = map(abs, vec)
+        avec = list(map(abs, vec))
         j = avec.index(max(avec))
-        jsign = int(avec[j] / vec[j])
+        jsign = int(old_div(avec[j], vec[j]))
         vec = list(transform.TransformVector(0, 0, 1))
         vec[i] = 0.0
         vec[j] = 0.0
-        avec = map(abs, vec)
+        avec = list(map(abs, vec))
         k = avec.index(max(avec))
-        ksign = int(avec[k] / vec[k])
+        ksign = int(old_div(avec[k], vec[k]))
 
         coords = [(xmin - offset, yc,  zc),
                   (xmax + offset, yc,  zc),
@@ -277,12 +280,12 @@ class AnatomicalLabelsFactory(ActorFactory):
                   (xc,  yc,  zmin - offset),
                   (xc,  yc,  zmax + offset)]
 
-        actors[0].SetPosition(coords[2 * i + (1 - isign) / 2])
-        actors[1].SetPosition(coords[2 * i + (1 + isign) / 2])
-        actors[2].SetPosition(coords[2 * j + (1 - jsign) / 2])
-        actors[3].SetPosition(coords[2 * j + (1 + jsign) / 2])
-        actors[4].SetPosition(coords[2 * k + (1 - ksign) / 2])
-        actors[5].SetPosition(coords[2 * k + (1 + ksign) / 2])
+        actors[0].SetPosition(coords[2 * i + old_div((1 - isign), 2)])
+        actors[1].SetPosition(coords[2 * i + old_div((1 + isign), 2)])
+        actors[2].SetPosition(coords[2 * j + old_div((1 - jsign), 2)])
+        actors[3].SetPosition(coords[2 * j + old_div((1 + jsign), 2)])
+        actors[4].SetPosition(coords[2 * k + old_div((1 - ksign), 2)])
+        actors[5].SetPosition(coords[2 * k + old_div((1 + ksign), 2)])
 
         width, height = renderer.GetSize()
         if height > 0:

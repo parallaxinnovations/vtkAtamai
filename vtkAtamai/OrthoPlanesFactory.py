@@ -1,3 +1,5 @@
+from __future__ import division
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -36,6 +38,8 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from builtins import range
+from past.utils import old_div
 __rcs_info__ = {
     #
     #  Creation Information
@@ -78,13 +82,13 @@ Public Methods:
 
   Specify the image volume:
 
-    SetInputData(*imagedata*,*i*=0)   -- set a vtkImageData to slice through
+    SetInputConnection(*imagedata*,*i*=0)   -- set a vtkImageData to slice through
 
-    GetInput(*i*=0)               -- get input *i*
+    GetInputConnection(*i*=0)               -- get input *i*
 
     AddInputData(*imagedata*)         -- add an input after the last input
 
-    RemoveInput(*i*=0)            -- remove an input
+    RemoveInputConnection(*i*=0)            -- remove an input
 
     GetNumberOfInputs()           -- current number of inputs
 
@@ -140,14 +144,16 @@ Interpolation:
 
 
 #======================================
-import ActorFactory
-import SlicePlaneFactory
-import PlaneIntersectionsFactory
-import PlaneGuideFactory
+from . import ActorFactory
+from . import SlicePlaneFactory
+from . import PlaneIntersectionsFactory
+from . import PlaneGuideFactory
 import math
 import vtk
 import logging
 
+
+logger = logging.getLogger(__name__)
 #======================================
 
 
@@ -158,9 +164,12 @@ class OrthoPlanesFactory(ActorFactory.ActorFactory):
 
         self._Inputs = {}
         self._LookupTables = {}
+        self._Start_Orientation = None
+        self._Start_Position = None
         self._Planes = []
         self._Plane = None    # currently picked plane
         self.cursor = None
+        self.__UserAction = None
 
         for i in range(3):
             plane = self.MakeSlicePlaneFactory()
@@ -195,6 +204,14 @@ class OrthoPlanesFactory(ActorFactory.ActorFactory):
         self.BindEvent("<B2-ButtonPress>", self.DoResetPlanes)
         self.BindEvent("<B3-ButtonPress>", self.DoResetPlanes)
 
+    @property
+    def UserAction(self):
+        return self.__UserAction
+
+    @UserAction.setter
+    def UserAction(self, value):
+        self.__UserAction = value
+
     def tearDown(self):
         ActorFactory.ActorFactory.tearDown(self)
 
@@ -211,18 +228,32 @@ class OrthoPlanesFactory(ActorFactory.ActorFactory):
     def MakePlaneIntersectionsFactory(self):
         return PlaneIntersectionsFactory.PlaneIntersectionsFactory()
 
-    def DoResetPlanes(self, event):
+    def DoResetPlanes(self, evt):
         self._Transform.Identity()
         self.Modified()
 
-    def DoStartAction(self, event):
-        self._Plane = None
+    def GetStartingOrientation(self):
+        """returns transform orientation angles at start of event"""
+        return self._Start_Orientation
+
+    def GetStartingPosition(self):
+        """return transform position at start of event"""
+        return self._Start_Position
+
+    def GetPickedPlane(self, evt):
+        if not hasattr(evt, 'actor'):
+            return None
         for plane in self._Planes:
-            if event.actor in plane.GetActors(event.renderer):
-                self._LastX = event.x
-                self._LastY = event.y
-                self._Plane = plane
-                break
+            if evt.actor in plane.GetActors(evt.renderer):
+                return plane
+
+    def DoStartAction(self, evt):
+        self._Plane = None
+        plane = self.GetPickedPlane(evt)
+        if plane:
+            self._LastX = evt.x
+            self._LastY = evt.y
+            self._Plane = plane
 
         if self._Plane is None:
             return
@@ -231,16 +262,16 @@ class OrthoPlanesFactory(ActorFactory.ActorFactory):
         self._PlaneGuides.SetVisibility(1)
 
         # just set the action to 'push' if the view is a 2D view
-        if event.renderer.GetActiveCamera().GetParallelProjection():
-            self.__UserAction = 'Push'
+        if evt.renderer.GetActiveCamera().GetParallelProjection():
+            self.UserAction = 'Push'
 
             # propagate the event to the slice plane itself
             self._Plane.SetUserAction('Push')
-            self._Plane.DoStartAction(event)
+            self._Plane.DoStartAction(evt)
 
             return
 
-        renderer = event.renderer
+        renderer = evt.renderer
 
         # find intersection of viewing ray from LastX,LastY with the plane
         # in world coordinates
@@ -259,8 +290,8 @@ class OrthoPlanesFactory(ActorFactory.ActorFactory):
         vs = self._Plane.GetSize2()
 
         # use dot-product to convert to 2D X,Y values between [0,1]
-        X = ((lx - ox) * ux + (ly - oy) * uy + (lz - oz) * uz) / us
-        Y = ((lx - ox) * vx + (ly - oy) * vy + (lz - oz) * vz) / vs
+        X = old_div(((lx - ox) * ux + (ly - oy) * uy + (lz - oz) * uz), us)
+        Y = old_div(((lx - ox) * vx + (ly - oy) * vy + (lz - oz) * vz), vs)
 
         # divide plane into three zones for different user interactions:
         # four corns  -- spin around plane normal at ortho center
@@ -268,69 +299,83 @@ class OrthoPlanesFactory(ActorFactory.ActorFactory):
         # center area -- push
 
         if ((X < 0.05 or X > 0.95) and (Y < 0.05 or Y > 0.95)):
-            self.__UserAction = 'Spin'
+            self.UserAction = 'Spin'
         elif (X < 0.05 or X > 0.95):
-            self.__UserAction = 'Rotate'
+            self.UserAction = 'Rotate'
             self.__RotateAxis = (vx, vy, vz)
             self.__RadiusVector = (ux, uy, uz)
         elif (Y < 0.05 or Y > 0.95):
-            self.__UserAction = 'Rotate'
+            self.UserAction = 'Rotate'
             self.__RotateAxis = (ux, uy, uz)
             self.__RadiusVector = (vx, vy, vz)
         else:
-            self.__UserAction = 'Push'
+            self.UserAction = 'Push'
 
         # Make Plane guides visible
-        if self.__UserAction == 'Push':
+        if self.UserAction == 'Push':
             self._PlaneGuides.SetColor(self._PushColor)
-        elif self.__UserAction == 'Rotate':
+        elif self.UserAction == 'Rotate':
             self._PlaneGuides.SetColor(self._RotateColor)
-        elif self.__UserAction == 'Spin':
+        elif self.UserAction == 'Spin':
             self._PlaneGuides.SetColor(self._SpinColor)
         else:
-            logging.error('Unknown action:', self.__UserAction)
+            logger.error('Unknown action: %s', self.UserAction)
+
+        if self.UserAction in ('Spin', 'Rotate'):
+            self._Start_Orientation = self._Transform.GetOrientation() # keep track of OrthoPlanes orientation angles
+        elif self.UserAction in ('Push',):
+            # get slice number
+            slice_position = plane.GetSlicePosition()
+            self._Start_Position = slice_position # keep track of OrthoPlanes position
 
         # propagate the event to the slice plane itself
-        self._Plane.SetUserAction(self.__UserAction)
-        self._Plane.DoStartAction(event)
+        self._Plane.SetUserAction(self.UserAction)
+        self._Plane.DoStartAction(evt)
 
         self.Modified()
 
-    def DoEndAction(self, event):
-        self.DoEndAction2(event)
+    def DoEndAction(self, evt):
+        self.DoEndAction2(evt)
         self.Modified()
 
-    def DoEndAction2(self, event):
+    def DoEndAction2(self, evt):
         """Body of DoEndAction() method
 
         This second call exists to allow inheritance to hook actions before a ModifiedEvent is posted"""
         if self._Plane:
             self._PlaneGuides.SetVisibility(0)
-            self._Plane.DoEndAction(event)
+            ## JDG self._Plane.DoEndAction(evt)
             self._Plane = None
-
-        self.__UserAction = None
+        self.UserAction = None
         self.__RotateAxis = None
         self.__RadiusVector = None
+        self._Start_Orientation = None
+        self._Start_Position = None
 
-    def DoAction(self, event):
+    def DoAction(self, evt):
 
-        if (self._Plane == None):
+        if self._Plane is None:
             return
-        if self.__UserAction == 'Push':
-            self.DoPush(event)
-        elif self.__UserAction == 'Spin':
-            self.DoSpin(event)
-        elif self.__UserAction == 'Rotate':
-            self.DoRotation(event)
+
+        if evt.num == 0 and self.UserAction != None:
+            logger.warning("Correcting a stuck mouse button!")
+            self.UserAction = None
+
+        if self.UserAction == 'Push':
+            self.DoPush(evt)
+        elif self.UserAction == 'Spin':
+            self.DoSpin(evt)
+        elif self.UserAction == 'Rotate':
+            self.DoRotation(evt)
         else:
             pass
 
-    def DoSpin(self, event):
-        if (self._Plane == None):
+    def DoSpin(self, evt):
+
+        if self._Plane is None:
             return
 
-        renderer = event.renderer
+        renderer = evt.renderer
 
         # find intersection of viewing ray from LastX,LastY with the plane
         lx, ly, lz = self._Plane.IntersectWithViewRay(self._LastX,
@@ -338,8 +383,8 @@ class OrthoPlanesFactory(ActorFactory.ActorFactory):
                                                       renderer)
 
         # new intersection
-        nx, ny, nz = self._Plane.IntersectWithViewRay(event.x,
-                                                      event.y,
+        nx, ny, nz = self._Plane.IntersectWithViewRay(evt.x,
+                                                      evt.y,
                                                       renderer)
 
         # mouse motion vector, in world coords
@@ -362,7 +407,7 @@ class OrthoPlanesFactory(ActorFactory.ActorFactory):
         rs = math.sqrt(rv[0] * rv[0] + rv[1] * rv[1] + rv[2] * rv[2])
 
         # normalize radius vector
-        rv = [rv[0] / rs, rv[1] / rs, rv[2] / rs]
+        rv = [old_div(rv[0], rs), old_div(rv[1], rs), old_div(rv[2], rs)]
 
         # spin direction
         wn_cross_rv = (wn[1] * rv[2] - wn[2] * rv[1],
@@ -380,23 +425,20 @@ class OrthoPlanesFactory(ActorFactory.ActorFactory):
 
         # Rotate around plane normal
         transform.RotateWXYZ(dw, wn[0], wn[1], wn[2])
-
         # Translate back
         transform.Translate(center[0], center[1], center[2])
 
-        self._LastX = event.x
-        self._LastY = event.y
-
-        # JDG added this
-        self._dw = dw
+        self._LastX = evt.x
+        self._LastY = evt.y
 
         self.Modified()
 
-    def DoRotation(self, event):
+    def DoRotation(self, evt):
+
         if self._Plane is None:
             return
 
-        renderer = event.renderer
+        renderer = evt.renderer
         camera = renderer.GetActiveCamera()
 
         # find intersection of viewing ray from LastX,LastY with the plane
@@ -411,10 +453,10 @@ class OrthoPlanesFactory(ActorFactory.ActorFactory):
 
         # and use it to find the world coords of the current x,y coord
         # (i.e. the mouse moves solely in x,y plane)
-        renderer.SetDisplayPoint(event.x, event.y, z)
+        renderer.SetDisplayPoint(evt.x, evt.y, z)
         renderer.DisplayToWorld()
         wx, wy, wz, w = renderer.GetWorldPoint()
-        wx, wy, wz = (wx / w, wy / w, wz / w)
+        wx, wy, wz = (old_div(wx, w), old_div(wy, w), old_div(wz, w))
 
         # mouse motion vector, in world coords
         dx, dy, dz = (wx - lx, wy - ly, wz - lz)
@@ -459,17 +501,17 @@ class OrthoPlanesFactory(ActorFactory.ActorFactory):
         # Translate back
         transform.Translate(center[0], center[1], center[2])
 
-        self._LastX = event.x
-        self._LastY = event.y
+        self._LastX = evt.x
+        self._LastY = evt.y
 
         # JDG added this
         self._dw = dw
 
         self.Modified()
 
-    def DoPush(self, event):
+    def DoPush(self, evt):
         if self._Plane:
-            self._Plane.DoPush(event)
+            self._Plane.DoPush(evt)
         self.Modified()
 
     def GetPlanes(self):
@@ -494,7 +536,7 @@ class OrthoPlanesFactory(ActorFactory.ActorFactory):
                 if actor in plane.GetActors(renderer):
                     return plane
 
-    def AddInputData(self, input, name=None):
+    def AddInputConnection(self, alg, name=None, table=None):
 
         # this change permits orthoplanes to be named - fallback is to use a
         # numerical index
@@ -504,12 +546,13 @@ class OrthoPlanesFactory(ActorFactory.ActorFactory):
         while name in self._Inputs:
             name += 1
 
-        self._Inputs[name] = input
-        self._LookupTables[name] = None
+        self._Inputs[name] = alg
+        self._LookupTables[name] = table
 
         planes = self._Planes
+
         for plane in planes:
-            plane.AddInputData(input, name)
+            plane.AddInputConnection(alg, name, table=table)
 
         if name == 0:
             planes[0].SetPlaneOrientationToXY()
@@ -523,34 +566,47 @@ class OrthoPlanesFactory(ActorFactory.ActorFactory):
 
         return name
 
-    def RemoveInput(self, name=0):
-        """w.RemoveInput(name)  -- remove a particular named input
+    def RemoveInputConnection(self, name=0):
+        """w.RemoveInputConnection(name)  -- remove a particular named input
         """
 
         if name not in self._Inputs:
             raise ValueError(
-                "RemoveInput: the specified input '{}' does not exist".format(name))
-            return
+                "RemoveInputConnection: the specified input '{}' does not exist".format(name))
 
         for plane in self._Planes:
-            plane.RemoveInput(name)
+            plane.RemoveInputConnection(name)
 
         del self._Inputs[name]
         del self._LookupTables[name]
 
         self.Modified()
 
-    def SetInputData(self, input, name=0):
+    def SetInputConnection(self, alg, name=0, table=None):
 
         planes = self._Planes
 
+        # if we're not provided with a table, try to reuse
+        if table is None:
+            table = self._LookupTables.get(name, None)
+
+        # remove old input image
+        if name in self._Inputs:
+            self.RemoveInputConnection(name)
+
         if name not in self._Inputs:
-            self.AddInputData(input, name)
+            self.AddInputConnection(alg, name, table=table)
             return
 
-        self._Inputs[name] = input
+        # TODO: do we get to any of the code past this point
+        import sys
+        sys.exit(0)
+
+        self._Inputs[name] = alg
+        self._LookupTables[name] = table
+
         for plane in planes:
-            plane.SetInputData(input, name)
+            plane.SetInputConnection(alg, name, table=table)
 
         if name == 0:
             planes[0].SetPlaneOrientationToXY()
@@ -601,12 +657,15 @@ class OrthoPlanesFactory(ActorFactory.ActorFactory):
 
             plane.Push(d)
 
-    def GetInput(self, i=0):
+    def GetInputConnection(self, name=0):
 
-        if i in self._Inputs:
-            return self._Inputs[i]
+        if name in self._Inputs:
+            return self._Inputs[name]
         else:
             return None
+
+    def GetInputConnections(self):
+        return self._Inputs
 
     def GetNumberOfInputs(self):
         return len(self._Inputs)
@@ -620,7 +679,7 @@ class OrthoPlanesFactory(ActorFactory.ActorFactory):
         self.Modified()
 
     def GetLookupTable(self, name=0):
-        return self._LookupTables[name]
+        return self._LookupTables.get(name, None)
 
     def SetOpacity(self, alpha, name=0):
         for plane in self._Planes:
@@ -638,7 +697,7 @@ class OrthoPlanesFactory(ActorFactory.ActorFactory):
         return self._Planes[0].GetImageTransform(name)
 
     def SetClippingPlanes(self, i, clippingPlanes=None):
-        if (clippingPlanes == None):
+        if clippingPlanes is None:
             clippingPlanes = i
             i = 0
         for plane in self._Planes:

@@ -1,3 +1,4 @@
+from __future__ import division
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -36,6 +37,7 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from past.utils import old_div
 __rcs_info__ = {
     #
     #  Creation Information
@@ -104,22 +106,22 @@ class ModePalette(vtkAtamai.Widgets.Frame):
             self, parent, x=x, y=y, width=width, height=height)
 
         self.rotate = vtkAtamai.Widgets.Button(self, x=0, y=0,
-                                               width=width / n, height=height,
+                                               width=old_div(width, n), height=height,
                                                fontsize=fontsize, text="Rotate")
         self.rotate.BindEvent("<Command>", self.BindRotate)
 
-        self.zoom = vtkAtamai.Widgets.Button(self, x=width / n, y=0,
-                                             width=width / n, height=height,
+        self.zoom = vtkAtamai.Widgets.Button(self, x=old_div(width, n), y=0,
+                                             width=old_div(width, n), height=height,
                                              fontsize=fontsize, text="Zoom")
         self.zoom.BindEvent("<Command>", self.BindZoom)
 
         self.pan = vtkAtamai.Widgets.Button(self, x=width / n * 2, y=0,
-                                            width=width / n, height=height,
+                                            width=old_div(width, n), height=height,
                                             fontsize=fontsize, text="Pan")
         self.pan.BindEvent("<Command>", self.BindPan)
 
         self.slice = vtkAtamai.Widgets.Button(self, x=width / n * 3, y=0,
-                                              width=width / n, height=height,
+                                              width=old_div(width, n), height=height,
                                               fontsize=fontsize, text="Slice")
         self.slice.BindEvent("<Command>", self.BindSlice)
 

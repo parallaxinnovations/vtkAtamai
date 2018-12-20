@@ -1,3 +1,5 @@
+from __future__ import division
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -36,6 +38,8 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from builtins import range
+from past.utils import old_div
 __rcs_info__ = {
     #
     #  Creation Information
@@ -78,7 +82,7 @@ Public Methods:
 
 """
 
-from ActorFactory import *
+from .ActorFactory import *
 from math import *
 
 
@@ -118,36 +122,36 @@ class ConeMarkerFactory(ActorFactory):
                     normal[1] * normal[1] +
                     normal[2] * normal[2])
         if(norm != 0):
-            n_x = normal[0] / norm
-            n_y = normal[1] / norm
-            n_z = normal[2] / norm
+            n_x = old_div(normal[0], norm)
+            n_y = old_div(normal[1], norm)
+            n_z = old_div(normal[2], norm)
         else:
             n_x = 1.0
             n_y = 0.0
             n_z = 0.0
 
         if (n_x * n_x > n_y * n_y and n_x * n_x > n_z * n_z):
-            o_x = n_z / sqrt(n_x * n_x + n_z * n_z)
+            o_x = old_div(n_z, sqrt(n_x * n_x + n_z * n_z))
             o_y = 0
-            o_z = -n_x / sqrt(n_x * n_x + n_z * n_z)
+            o_z = old_div(-n_x, sqrt(n_x * n_x + n_z * n_z))
 
             p_x = -n_x * n_y / sqrt(n_x * n_x + n_z * n_z)
             p_y = 1
             p_z = -n_y * n_z / sqrt(n_x * n_x + n_z * n_z)
 
         elif (n_y * n_y > n_z * n_z):
-            o_y = n_x / sqrt(n_y * n_y + n_x * n_x)
+            o_y = old_div(n_x, sqrt(n_y * n_y + n_x * n_x))
             o_z = 0
-            o_x = -n_y / sqrt(n_y * n_y + n_x * n_x)
+            o_x = old_div(-n_y, sqrt(n_y * n_y + n_x * n_x))
 
             p_y = -n_y * n_z / sqrt(n_y * n_y + n_x * n_x)
             p_z = 1
             p_x = -n_z * n_x / sqrt(n_y * n_y + n_x * n_x)
 
         else:
-            o_z = n_y / sqrt(n_z * n_z + n_y * n_y)
+            o_z = old_div(n_y, sqrt(n_z * n_z + n_y * n_y))
             o_x = 0
-            o_y = -n_z / sqrt(n_z * n_z + n_y * n_y)
+            o_y = old_div(-n_z, sqrt(n_z * n_z + n_y * n_y))
 
             p_z = -n_z * n_x / sqrt(n_z * n_z + n_y * n_y)
             p_x = 1
@@ -187,7 +191,7 @@ class ConeMarkerFactory(ActorFactory):
         self.Modified()
 
     def SetColor(self, *args):
-        apply(self.__property.SetColor, args)
+        self.__property.SetColor(*args)
         self.Modified()
 
     def GetColor(self):
@@ -202,6 +206,6 @@ class ConeMarkerFactory(ActorFactory):
         actor = ActorFactory._NewActor(self)
         actor.SetUserTransform(self.__transform)
         mapper = vtk.vtkPolyDataMapper()
-        mapper.SetInput(self.__cone.GetOutput())
+        mapper.SetInputConnection(self.__cone.GetOutputPort())
         actor.SetMapper(mapper)
         return actor

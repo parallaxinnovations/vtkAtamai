@@ -1,3 +1,6 @@
+from __future__ import division
+from __future__ import print_function
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -36,6 +39,7 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from past.utils import old_div
 __rcs_info__ = {
     #
     #  Creation Information
@@ -76,9 +80,9 @@ See Also:
 
 Initialization:
 
-  RenderPane2D(*master*=None)
+  RenderPane2D(*parent*=None)
 
-  *master*  - the PaneFrame that will hold this RenderPane
+  *parent*  - the PaneFrame that will hold this RenderPane
 
 Public Methods:
 
@@ -107,8 +111,9 @@ Handler Methods:
 """
 
 #======================================
-from RenderPane import *
+from .RenderPane import *
 from PI.visualization.common import CoordinateSystem
+import numpy as np
 
 # TODO: refactor so this doesn't depend on PI code
 
@@ -125,7 +130,7 @@ class RenderPane2D(RenderPane):
     """
 
     def __init__(self, *args, **kw):
-        apply(RenderPane.__init__, (self,) + args, kw)
+        RenderPane.__init__(*(self,) + args, **kw)
 
         self._Renderer.GetActiveCamera().ParallelProjectionOn()
 
@@ -133,7 +138,8 @@ class RenderPane2D(RenderPane):
         self._Plane = None
 
         # what style of coordinate system?
-        self._coordinate_system = CoordinateSystem.CoordinateSystem.vtk_coords
+        self._image_coordinate_system = CoordinateSystem.CoordinateSystem.vtk_coords
+        self._preferred_view_coordinate_system = CoordinateSystem.CoordinateSystem.vtk_coords
 
         # Action is set if the window receives a click
         self._Action = 0
@@ -155,13 +161,19 @@ class RenderPane2D(RenderPane):
         self.BindResetToButton(2, "Shift")
 
     def __del__(self):
-        print 'RenderPane2D deleted!'
+        print('RenderPane2D deleted!')
 
-    def SetCoordinateSystem(self, val):
-        self._coordinate_system = val
+    def SetImageCoordinateSystem(self, val):
+        self._image_coordinate_system = val
 
-    def GetCoordinateSystem(self):
-        return self._coordinate_system
+    def GetImageCoordinateSystem(self):
+        return self._image_coordinate_system
+
+    def SetPreferredViewCoordinateSystem(self, val):
+        self._preferred_view_coordinate_system = val
+
+    def GetPreferredViewCoordinateSystem(self):
+        return self._preferred_view_coordinate_system
 
     #--------------------------------------
     def SetPointOfInterest(self, position):
@@ -180,8 +192,8 @@ class RenderPane2D(RenderPane):
 
         # check for center out of window
         if w > 0 and h > 0 and \
-            ((dx - ox - 0.5) / w < 0.0 or (dx - ox - 0.5) / w > 1.0 or
-             ((dy - oy - 0.5) / h < 0.0 or (dy - oy - 0.5) / h > 1.0)):
+            (old_div((dx - ox - 0.5), w) < 0.0 or old_div((dx - ox - 0.5), w) > 1.0 or
+             (old_div((dy - oy - 0.5), h) < 0.0 or old_div((dy - oy - 0.5), h) > 1.0)):
             camera = self._Renderer.GetActiveCamera()
             vx, vy, vz = camera.GetDirectionOfProjection()
             d = camera.GetDistance()
@@ -260,8 +272,8 @@ class RenderPane2D(RenderPane):
             n1 = math.sqrt(v1[0] * v1[0] + v1[1] * v1[1] + v1[2] * v1[2])
             n2 = math.sqrt(v2[0] * v2[0] + v2[1] * v2[1] + v2[2] * v2[2])
 
-            v1 = (v1[0] / n1, v1[1] / n1, v1[2] / n1)
-            v2 = (v2[0] / n2, v2[1] / n2, v2[2] / n2)
+            v1 = (old_div(v1[0], n1), old_div(v1[1], n1), old_div(v1[2], n1))
+            v2 = (old_div(v2[0], n2), old_div(v2[1], n2), old_div(v2[2], n2))
 
             normal = (v1[1] * v2[2] - v1[2] * v2[1],
                       v1[2] * v2[0] - v1[0] * v2[2],
@@ -301,19 +313,20 @@ class RenderPane2D(RenderPane):
 
         self._Renderer.ResetCamera()
 
-        return
-
         if (self._Plane):
             input_connection = self._Plane.GetInputConnection()
             if (input_connection != None):
-                # TODO: port to VTK6
-                # input_connection.UpdateInformation()
-                extent = input.GetExtent()
-                spacing = input.GetSpacing()
+
+                prod = input_connection.GetProducer()
+                prod.UpdateInformation()
+                _input = prod.GetOutputDataObject(0)  # trivial producer doesn't have GetOutput()
+
+                extent = _input.GetExtent()
+                spacing = _input.GetSpacing()
                 maxdim = max(abs((extent[1] - extent[0] + 1) * spacing[0]),
                              abs((extent[3] - extent[2] + 1) * spacing[1]),
                              abs((extent[5] - extent[4] + 1) * spacing[2]))
-                self._Renderer.GetActiveCamera().SetParallelScale(maxdim / 2.0)
+                self._Renderer.GetActiveCamera().SetParallelScale(old_div(maxdim, 2.0))
             self._LastNormal = (0.0, 0.0, 0.0)
             self._LastViewUp = (0.0, 0.0, 0.0)
             self._LastS = 0.5
@@ -353,10 +366,10 @@ class RenderPane2D(RenderPane):
                      center[1] - origin[1],
                      center[2] - origin[2])
 
-                s = (v1[0] * v[0] + v1[1] * v[1] + v1[2] * v[2]) / \
-                    (v1[0] ** 2 + v1[1] ** 2 + v1[2] ** 2)
-                t = (v2[0] * v[0] + v2[1] * v[1] + v2[2] * v[2]) / \
-                    (v2[0] ** 2 + v2[1] ** 2 + v2[2] ** 2)
+                s = old_div((v1[0] * v[0] + v1[1] * v[1] + v1[2] * v[2]), \
+                    (v1[0] ** 2 + v1[1] ** 2 + v1[2] ** 2))
+                t = old_div((v2[0] * v[0] + v2[1] * v[1] + v2[2] * v[2]), \
+                    (v2[0] ** 2 + v2[1] ** 2 + v2[2] ** 2))
 
                 if (abs(s - self._LastS) + abs(t - self._LastT) > 1e-5):
                     self._LastS = s
@@ -378,25 +391,47 @@ class RenderPane2D(RenderPane):
             center = transform.TransformFloatPoint(center)
 
             # use DICOM coordinate system?
-            if self.GetCoordinateSystem() == CoordinateSystem.CoordinateSystem.dicom_coords:
-                _m = -1
-            else:
-                _m = 1
+            view_as_dicom = (self.GetPreferredViewCoordinateSystem() == CoordinateSystem.CoordinateSystem.dicom_coords) or \
+                       (self.GetImageCoordinateSystem() == CoordinateSystem.CoordinateSystem.dicom_coords)
 
-            camera.SetFocalPoint(center)
-            camera.SetPosition(center[0] + _m * (normal[0] * 251),
-                               center[1] + _m * (normal[1] * 251),
-                               center[2] + _m * (normal[2] * 251))
-            camera.ComputeViewPlaneNormal()
-            camera.SetViewUp(vector[0], _m * vector[1], vector[2])
 
+            x, y = self.GetDirectionCosines()
             self._LastNormal = normal
             self._LastViewUp = vector
+
+            if view_as_dicom:
+
+                M = np.matrix(np.zeros([3,3], dtype='float32'))
+                M[0,:] = x
+                M[1,:] = y
+                M[2,:] = np.cross(x,y)
+
+                vector2 = (np.abs(np.array(v1) + np.array(v2)) == 0).astype('int')
+                vector2 = (M * np.matrix(vector2).T).T
+
+                idx = max(vector2[0]).argmax()
+
+                if idx == 0:
+                    vector = (-vector[0], -vector[1], -vector[2])
+                    normal = (-normal[0], -normal[1], -normal[2])
+                elif idx == 1:
+                    pass
+                else:
+                    vector = (-vector[0], -vector[1], -vector[2])
+                    normal = (-normal[0], -normal[1], -normal[2])
+
+            camera.SetFocalPoint(center)
+            camera.SetPosition(center[0] + (normal[0] * 251),
+                               center[1] + (normal[1] * 251),
+                               center[2] + (normal[2] * 251))
+            camera.ComputeViewPlaneNormal()
+            camera.SetViewUp(vector[0], vector[1], vector[2])
+
             self._LastFocalPoint = focus
 
             d = camera.GetDistance()
             # p = camera.GetParallelScale()*0.05
-            p = 0.7 + camera.GetParallelScale() / 95
+            p = 0.7 + old_div(camera.GetParallelScale(), 95)
 
             camera.SetClippingRange(d - p, d + p)
 

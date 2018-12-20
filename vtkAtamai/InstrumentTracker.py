@@ -1,3 +1,4 @@
+from __future__ import print_function
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -36,6 +37,10 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import range
+from builtins import object
 __rcs_info__ = {
     #
     #  Creation Information
@@ -163,7 +168,7 @@ Protected Attributes:
 import os
 import sys
 if os.name == 'posix':
-    import commands
+    import subprocess
 
 #======================================
 from vtkAtamai.ActorFactory import *
@@ -285,7 +290,7 @@ class InstrumentTracker(ActorFactory):
                         device = ("/dev/ttya", "/dev/ttyb")[port - 1]
                     # /sbin/fuser checks to see if another process
                     # is using the port
-                    result = commands.getoutput("/sbin/fuser " + device)
+                    result = subprocess.getoutput("/sbin/fuser " + device)
                     result = result.strip()
                     # check for device name in command output
                     if device == result[0:len(device)]:
@@ -375,7 +380,7 @@ class InstrumentTracker(ActorFactory):
                 # get autodetect information
                 mfg = tool.GetToolManufacturer()
                 id = tool.GetToolType()
-                print "New Tool: ", (mfg, id)    # debug line
+                print("New Tool: ", (mfg, id))    # debug line
                 try:
                     # try to autodetect the tool
                     classlist = self._RegisteredClasses[(mfg, id)]

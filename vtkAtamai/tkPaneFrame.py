@@ -36,6 +36,9 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import str
 __rcs_info__ = {
     #
     #  Creation Information
@@ -72,7 +75,7 @@ Derived From:
 
 """
 
-import Tkinter
+import tkinter
 from vtkAtamai.PaneFrame import *
 import vtk
 import os
@@ -158,16 +161,16 @@ def vtkLoadPythonTkWidgets(interp):
     interp.call('load', filename)
 
 
-class tkPaneFrame(PaneFrame, Tkinter.Widget):
+class tkPaneFrame(PaneFrame, tkinter.Widget):
 
     _ScheduleIdDict = {}
 
     def __init__(self, master=None, *args, **kw):
         used_default_root = 0
         if not master:
-            if not Tkinter._default_root:
-                Tkinter._default_root = Tkinter.Tk()
-            master = Tkinter._default_root
+            if not tkinter._default_root:
+                tkinter._default_root = tkinter.Tk()
+            master = tkinter._default_root
             used_default_root = 1
         if vtk.vtkVersion().GetVTKMajorVersion() >= 4:
             vtkLoadPythonTkWidgets(master.tk)
@@ -194,7 +197,7 @@ class tkPaneFrame(PaneFrame, Tkinter.Widget):
         # first initialize the Tkinter widget
         kw['rw'] = self._RenderWindow.GetAddressAsString("vtkRenderWindow")
 
-        Tkinter.Widget.__init__(self, master, 'vtkTkRenderWidget', {}, kw)
+        tkinter.Widget.__init__(self, master, 'vtkTkRenderWidget', {}, kw)
 
         # then initialize the PaneFrame
         PaneFrame.__init__(self)

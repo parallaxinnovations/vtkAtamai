@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -36,6 +37,7 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from builtins import range
 __rcs_info__ = {
     #
     #  Creation Information
@@ -98,7 +100,7 @@ Public Methods:
 
 """
 
-from ActorFactory import *
+from .ActorFactory import *
 
 
 class ThinPlateSplineFactory(ActorFactory):
@@ -233,8 +235,8 @@ class ThinPlateSplineFactory(ActorFactory):
         spoints.SetNumberOfPoints(n)
         tpoints.SetNumberOfPoints(n)
         for i in range(n):
-            apply(spoints.SetPoint, (i,) + tuple(self._SourceLandmarks[i]))
-            apply(tpoints.SetPoint, (i,) + tuple(self._TargetLandmarks[i]))
+            spoints.SetPoint(*(i,) + tuple(self._SourceLandmarks[i]))
+            tpoints.SetPoint(*(i,) + tuple(self._TargetLandmarks[i]))
         self._ResultTransform.SetSourceLandmarks(spoints)
         self._ResultTransform.SetTargetLandmarks(tpoints)
 

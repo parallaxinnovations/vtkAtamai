@@ -1,3 +1,5 @@
+from __future__ import division
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -36,6 +38,7 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from past.utils import old_div
 __rcs_info__ = {
     #
     #  Creation Information
@@ -109,7 +112,7 @@ Protected Attributes:
 """
 
 #======================================
-from ActorFactory import *
+from .ActorFactory import *
 import math
 
 #======================================
@@ -215,7 +218,7 @@ class CursorFactory(ActorFactory):
                     math.tan(0.5 * camera.GetViewAngle() / 57.296)
             windowWidth, windowHeight = renderer.GetSize()
             if windowWidth > 0 and windowHeight > 0:
-                pitch = worldsize / windowHeight
+                pitch = old_div(worldsize, windowHeight)
                 for actor in actors:
                     actor.SetScale(pitch)
 

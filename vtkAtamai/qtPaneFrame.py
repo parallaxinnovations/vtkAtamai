@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -36,6 +37,8 @@
 # This file represents a derivative work by Parallax Innovations Inc.
 #
 
+from builtins import str
+from builtins import chr
 __rcs_info__ = {
     #
     #  Creation Information
@@ -72,7 +75,7 @@ Derived From:
 
 #======================================
 from qt import *
-from PaneFrame import *
+from .PaneFrame import *
 
 #======================================
 

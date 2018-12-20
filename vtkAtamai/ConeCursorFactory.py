@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
@@ -73,7 +74,7 @@ See Also:
 """
 
 #======================================
-from CursorFactory import *
+from .CursorFactory import *
 
 #======================================
 
