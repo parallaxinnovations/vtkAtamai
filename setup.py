@@ -2,7 +2,12 @@ import os
 import sys
 from distutils.core import setup
 
-requires = []
+requires = [
+  "future",
+  "numpy",
+  "vtk",
+  "zope.interface>=4.6.0"
+]
 
 setup(name="vtkAtamai",
       version="2.5.0",
@@ -15,9 +20,11 @@ setup(name="vtkAtamai",
   repackaged for use in MicroView.
 
   """,
-      url="http://microview.sourceforge.net/vtkAtamai",
+      url="https://github.com/parallaxinnovations/vtkAtamai",
       packages=['vtkAtamai'],
       license="BSD",
       maintainer="Jeremy Gill",
       maintainer_email="jgill@parallax-innovations.com",
+      requires=requires,
+      tests_require=['pytest', 'pytest-cov', 'tempdir>=0.7.1', 'future', 'codecov'],
       )
