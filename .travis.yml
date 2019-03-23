@@ -12,5 +12,5 @@ install:
   - pip install pytest-cov tempdir>=0.7.1 future codecov
 # command to run tests
 script:
-  - pytest --cov=PI_build
+  - pytest --cov=vtkAtamai
   - codecov
