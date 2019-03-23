@@ -1,12 +1,12 @@
 import os
 import sys
-from distutils.core import setup
+from setuptools import setup
 
 requires = [
   "future",
   "numpy",
   "vtk",
-  "zope.interface>=4.6.0"
+  "zope.interface"
 ]
 
 setup(name="vtkAtamai",
