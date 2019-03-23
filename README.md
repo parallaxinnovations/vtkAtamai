@@ -11,3 +11,4 @@ See the ChangeLog file in this directory for specifics of these changes.
 # Status
 
 [![Build Status](https://travis-ci.com/parallaxinnovations/vtkAtamai.svg?branch=master)](https://travis-ci.com/parallaxinnovations/vtkAtamai)
+[![codecov](https://codecov.io/gh/parallaxinnovations/PI_build/branch/master/graph/badge.svg)](https://codecov.io/gh/parallaxinnovations/vtkAtamai)
