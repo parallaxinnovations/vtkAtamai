@@ -284,7 +284,7 @@ class ImagePane(RenderPane.RenderPane):
         self._ImageColor = []
 
         reslice = vtk.vtkImageReslice()
-        reslice.SetInput(0, self.MakeDefaultImage())
+        reslice.SetInputConnection(0, self.MakeDefaultImage())
         reslice.SetInterpolationMode(self._InterpolationMode)
         reslice.SetResliceAxes(vtk.vtkMatrix4x4())
         reslice.SetOutputExtent(0, 255, 0, 255, 0, 0)
@@ -300,7 +300,7 @@ class ImagePane(RenderPane.RenderPane):
             table.SetTableValue(i, old_div(i, 255.0), old_div(i, 255.0), old_div(i, 255.0), 1.0)
 
         color = vtk.vtkImageMapToColors()
-        color.SetInput(reslice.GetOutput())
+        color.SetInputConnection(reslice.GetOutputPort())
         color.SetOutputFormatToRGB()
         color.SetLookupTable(table)
         color.AddObserver('ExecuteInformationEvent', self.OnMapToColors)
@@ -309,7 +309,7 @@ class ImagePane(RenderPane.RenderPane):
         self._ImageColor.append(color)
 
         self._ImageBlend = vtk.vtkImageBlend()
-        self._ImageBlend.SetInput(0, self._ImageColor[0].GetOutput())
+        self._ImageBlend.SetInputConnection(0, self._ImageColor[0].GetOutputPort())
 
         # the ImageChangeInformation adjusts the image so that the
         # currently viewed slice lies at z=0
@@ -317,7 +317,7 @@ class ImagePane(RenderPane.RenderPane):
         self._ImageChangeInformation.SetInput(self._ImageBlend.GetOutput())
 
         self._ImageMapper = vtk.vtkImageMapper()
-        self._ImageMapper.SetInput(self._ImageChangeInformation.GetOutput())
+        self._ImageMapper.SetInputConnection(self._ImageChangeInformation.GetOutputPort())
         self._ImageMapper.SetColorWindow(255.0)
         self._ImageMapper.SetColorLevel(127.5)
 
@@ -331,7 +331,7 @@ class ImagePane(RenderPane.RenderPane):
         """
         self._ImageActor = vtk.vtkImageActor()
         self._ImageActor.InterpolateOff()
-        self._ImageActor.SetInput(self._ImageChangeInformation.GetOutput())
+        self._ImageActor.SetInputConnection(self._ImageChangeInformation.GetOutputPort())
 
     def _InitializeTexture2(self):
         """Perform the initialization for extracting a single slice from
@@ -346,7 +346,7 @@ class ImagePane(RenderPane.RenderPane):
         self._ImageActor2 = []
 
         reslice2 = vtk.vtkImageReslice()
-        reslice2.SetInput(self.MakeDefaultImage())
+        reslice2.SetInputConnection(self.MakeDefaultImage())
         reslice2.SetInterpolationModeToNearestNeighbor()
         reslice2.SetResliceAxes(self._ImageReslice[0].GetResliceAxes())
         reslice2.SetBackgroundLevel(0)
@@ -355,7 +355,7 @@ class ImagePane(RenderPane.RenderPane):
         self._ImageReslice2.append(reslice2)
 
         color2 = vtk.vtkImageMapToColors()
-        color2.SetInput(reslice2.GetOutput())
+        color2.SetInputConnection(reslice2.GetOutputPort())
         color2.SetOutputFormatToRGB()
         color2.SetLookupTable(self._ImageColor[0].GetLookupTable())
         color2.AddObserver('ExecuteInformationEvent', self.OnMapToColors)
@@ -363,7 +363,7 @@ class ImagePane(RenderPane.RenderPane):
         self._ImageColor2.append(color2)
 
         info2 = vtk.vtkImageChangeInformation()
-        info2.SetInput(self._ImageColor2[0].GetOutput())
+        info2.SetInputConnection(self._ImageColor2[0].GetOutputPort())
         origin = info2.GetOutputOrigin()
         info2.SetOutputOrigin(origin[0], origin[1], 0.0)
 
@@ -371,7 +371,7 @@ class ImagePane(RenderPane.RenderPane):
 
         actor2 = vtk.vtkImageActor()
         actor2.SetInterpolate(self._InterpolationMode)
-        actor2.SetInput(self._ImageChangeInformation2[0].GetOutput())
+        actor2.SetInputConnection(self._ImageChangeInformation2[0].GetOutputPort())
 
         self._ImageActor2.append(actor2)
 
@@ -540,7 +540,7 @@ class ImagePane(RenderPane.RenderPane):
         image.DrawSegment(2, 253, 253, 2)
         image.DrawSegment(2, 2, 253, 253)
 
-        return image.GetOutput()
+        return image.GetOutputPort()
 
     def SetResliceAxes(self, *args):
         """w.SetResliceAxes(axes)  -- set the slice orientation
