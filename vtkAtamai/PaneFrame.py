@@ -124,7 +124,7 @@ Notes:
 """
 from __future__ import division
 
-#======================================
+# ======================================
 from past.utils import old_div
 import vtk
 
@@ -236,6 +236,7 @@ class PaneFrame(EventHandler.EventHandler):
     def _BindInteractor(self):
 
         self.interactor_style = vtk.vtkInteractorStyleUser()
+        self.zoom_style = vtk.vtkInteractorStyleRubberBand3D()
 
         self._RenderWindowInteractor.SetInteractorStyle(self.interactor_style)
 
@@ -275,15 +276,20 @@ class PaneFrame(EventHandler.EventHandler):
         obj.AddObserver("LeaveEvent",
                         self._OnLeave)
 
+        self._RenderWindowInteractor.AddObserver(
+            "MouseWheelForwardEvent", self._OnMouseWheelForward)
+        self._RenderWindowInteractor.AddObserver(
+            "MouseWheelBackwardEvent", self._OnMouseWheelBackward)
 
-    #--------------------------------------
+    # --------------------------------------
+
     def SetTitle(self, title):
         self._RenderWindow.SetWindowName(title)
 
     def GetTitle(self):
         self._RenderWindow.GetWindowName()
 
-    #--------------------------------------
+    # --------------------------------------
     def SetDesiredFPS(self, fps):
         """Set the desired frames-per-second for interaction."""
         self._DesiredFPS = fps
@@ -292,7 +298,7 @@ class PaneFrame(EventHandler.EventHandler):
         """Get the desired frames-per-second for interaction."""
         return self._DesiredFPS
 
-    #--------------------------------------
+    # --------------------------------------
     def _OnTimer(self, obj=None, event=""):
         epochmillisecs = time.time() * 1000  # ms since epoch
         for item in list(PaneFrame._ScheduledCallbacks):
@@ -355,7 +361,7 @@ class PaneFrame(EventHandler.EventHandler):
 
         #(x, y) = obj.GetEventPosition()
         #(oldx, oldy) = obj.GetLastEventPosition()
-        x,y = obj.GetLastPos()
+        x, y = obj.GetLastPos()
         oldx, oldy = obj.GetOldPos()
 
         if x == oldx and y == oldy:
@@ -374,6 +380,20 @@ class PaneFrame(EventHandler.EventHandler):
         (e.x, e.y) = (x, y)
         # self.PrintEvent(e)
         self.HandleEvent(e)
+
+    def _OnMouseWheelForward(self, obj=None, event=""):
+
+        # temporarily bind an interactor style so we can use it to zoom
+        self.zoom_style.SetInteractor(self._RenderWindowInteractor)
+        self.zoom_style.OnMouseWheelForward()
+        self.zoom_style.SetInteractor(None)
+
+    def _OnMouseWheelBackward(self, obj=None, event=""):
+
+        # temporarily bind an interactor style so we can use it to zoom
+        self.zoom_style.SetInteractor(self._RenderWindowInteractor)
+        self.zoom_style.OnMouseWheelBackward()
+        self.zoom_style.SetInteractor(None)
 
     def _OnChar(self, obj=None, event=""):
         pass
@@ -468,7 +488,7 @@ class PaneFrame(EventHandler.EventHandler):
         # self.PrintEvent(e)
         self.HandleEvent(e)
 
-    #--------------------------------------
+    # --------------------------------------
     def _TrapTimer(self):
         epochmillisecs = time.time() * 1000  # ms since epoch
         for item in list(PaneFrame._ScheduledCallbacks):
@@ -479,7 +499,7 @@ class PaneFrame(EventHandler.EventHandler):
                     item[2] = epochmillisecs + item[3]
                 item[1]()
 
-    #--------------------------------------
+    # --------------------------------------
     def _SetCurrentPane(self, pane, event):
         # change the current pane, send an
         # Enter event to the new pane and a
@@ -505,7 +525,7 @@ class PaneFrame(EventHandler.EventHandler):
 
         self._CurrentPane = pane
 
-    #--------------------------------------
+    # --------------------------------------
     def _SetFocusPane(self, pane, event):
         # change the current pane, send an
         # Enter event to the new pane and a
@@ -531,7 +551,7 @@ class PaneFrame(EventHandler.EventHandler):
 
         self._FocusPane = pane
 
-    #--------------------------------------
+    # --------------------------------------
     def _HandleConfigure(self, event):
         # pass off the configure event to the Panes
         width = event.width
@@ -571,7 +591,7 @@ class PaneFrame(EventHandler.EventHandler):
 
             pane.HandleEvent(e)
 
-    #--------------------------------------
+    # --------------------------------------
     def _QualityRender(self):
         # this method is called every 0.5 seconds and checks to see
         # if interaction has stopped, and if so then it does a
@@ -592,7 +612,7 @@ class PaneFrame(EventHandler.EventHandler):
         ## JDG self.RenderAll(force_redraw=True)
         self.Render(force_redraw=True)
 
-    #--------------------------------------
+    # --------------------------------------
     def HandleEvent(self, event):
         # note: both key and mouse events are sent to the pane under
         #       the mouse, there is no "focus" for keypresses
@@ -686,7 +706,7 @@ class PaneFrame(EventHandler.EventHandler):
 
         return returnval
 
-    #--------------------------------------
+    # --------------------------------------
     def ConnectRenderPane(self, pane):
         if pane in self._RenderPanes:
             return
@@ -704,7 +724,7 @@ class PaneFrame(EventHandler.EventHandler):
     def GetRenderPanes(self):
         return self._RenderPanes
 
-    #--------------------------------------
+    # --------------------------------------
     def RenderAll(self, force_redraw=False):
         rendereredframes = []
         for frame in PaneFrame.AllPaneFrames:
@@ -732,11 +752,11 @@ class PaneFrame(EventHandler.EventHandler):
 
         return renderneeded
 
-    #--------------------------------------
+    # --------------------------------------
     def GetRenderWindow(self):
         return self._RenderWindow
 
-    #--------------------------------------
+    # --------------------------------------
     def ScheduleOnce(self, millisecs, func):
         # schedule the specified function to be called after the
         # specified number of milliseconds
@@ -758,7 +778,7 @@ class PaneFrame(EventHandler.EventHandler):
             if item[0] == id:
                 PaneFrame._ScheduledCallbacks.remove(item)
 
-    #--------------------------------------
+    # --------------------------------------
     def Start(self):
 
         self.Render()

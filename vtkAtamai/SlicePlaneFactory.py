@@ -1525,7 +1525,14 @@ class SlicePlaneFactory(ActorFactory.ActorFactory):
 
         self.texture = vtk.vtkTexture()
         self.texture.SetQualityTo32Bit()
-        self.texture.MapColorScalarsThroughLookupTableOff()
+
+        vtk_ver = vtk.vtkVersion()
+        vtk_ver = vtk_ver.GetVTKMajorVersion() * 10 + \
+                  vtk_ver.GetVTKMinorVersion()
+        if vtk_ver >= 82:
+            self.texture.SetColorModeToDirectScalars()
+        else:
+            self.texture.MapColorScalarsThroughLookupTableOff()
         self.texture.SetInputConnection(
             self._ImageMapToColors[name].GetOutputPort())
         self.texture.SetInterpolate(self._TextureInterpolate)

@@ -1,7 +1,7 @@
 # =========================================================================
 #
 # Copyright (c) 2000 Atamai, Inc.
-# Copyright (c) 2011-2018 Parallax Innovations Inc.
+# Copyright (c) 2011-2022 Parallax Innovations Inc.
 #
 # Use, modification and redistribution of the software, in source or
 # binary forms, are permitted provided that the following terms and
@@ -55,7 +55,7 @@ Derived From:
 """
 from __future__ import absolute_import
 
-#======================================
+# ======================================
 from builtins import chr
 
 # we can't use lib2to3 on str() and hex() under Linux with py2.7 it seems
@@ -100,7 +100,7 @@ class EventTimer(wx.Timer):
         self.func()
 
 
-#======================================
+# ======================================
 class wxPaneFrame(PaneFrame.PaneFrame, baseClass):
 
     # convert event types
@@ -680,7 +680,6 @@ class wxPaneFrame(PaneFrame.PaneFrame, baseClass):
         """Handles the wx.EVT_MOUSEWHEEL event for
         wxVTKRenderWindowInteractor.
         """
-
         # event processing should continue
         event.Skip()
 
@@ -857,7 +856,8 @@ class wxPaneFrame(PaneFrame.PaneFrame, baseClass):
                     d = '0x' + d
 
                 # the vtk pointer format changed between 6.1 and 6.2
-                ver = list(map(int, vtk.vtkVersion().GetVTKVersion().split('.')))
+                ver = list(
+                    map(int, vtk.vtkVersion().GetVTKVersion().split('.')))
                 ver = ver[0] * 10000 + ver[1] * 100 + ver[2]
 
                 if ver < 60200:
@@ -927,7 +927,7 @@ class wxPaneFrame(PaneFrame.PaneFrame, baseClass):
 
         self.Render()
 
-    #--------------------------------------
+    # --------------------------------------
     def Render(self, force_redraw=False):
 
         if self.__Created:
@@ -945,7 +945,7 @@ class wxPaneFrame(PaneFrame.PaneFrame, baseClass):
             self.__Created = 1
             return PaneFrame.PaneFrame.Render(self)
 
-    #--------------------------------------
+    # --------------------------------------
     def SetTitle(self, title):
         try:
             self._wxFrame.SetTitle(title)
@@ -958,6 +958,6 @@ class wxPaneFrame(PaneFrame.PaneFrame, baseClass):
         except AttributeError:
             return ""
 
-    #--------------------------------------
+    # --------------------------------------
     def Start(self):
         wx.PySimpleApp().MainLoop()

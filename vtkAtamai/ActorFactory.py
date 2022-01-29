@@ -358,7 +358,7 @@ class ActorFactory(EventHandler.EventHandler):
     # from the RenderPanes anyway.
 
     def __del__(self):
-        print('deleting {0}'.format(self.__class__))
+        ## print('deleting {0}'.format(self.__class__))
 
         for renderer in self._Renderers:
             self.RemoveFromRenderer(renderer)
